@@ -2,5 +2,16 @@
   "name": "@nationforge/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Backend do NationForge (NestJS). Ainda não implementado — placeholder da Fase 2, código chega na Fase 4."
+  "description": "Backend do NationForge. Acesso a dados via Prisma (Fase 3); aplicação NestJS chega na Fase 4.",
+  "dependencies": {
+    "@prisma/client": "^7.9.1"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "prisma": "^7.9.1"
+  },
+  "scripts": {
+    "prisma:generate": "prisma generate",
+    "db:push": "prisma db push"
+  }
 }

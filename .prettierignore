@@ -3,6 +3,7 @@ dist
 build
 .next
 coverage
+generated
 package-lock.json
 
 # Documento de especificação do projeto, mantido no formato original do usuário

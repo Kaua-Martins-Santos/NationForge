@@ -1,0 +1,14 @@
+// Prisma schema do NationForge.
+// Documentação: https://pris.ly/d/prisma-schema
+//
+// Ainda sem models: as entidades do domínio serão criadas nas fases seguintes,
+// cada uma na sua etapa.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}

@@ -14,7 +14,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prisma:generate": "npm run prisma:generate -w @nationforge/api",
+    "db:push": "npm run db:push -w @nationforge/api"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
