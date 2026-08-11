@@ -2,10 +2,13 @@
   "name": "nationforge",
   "version": "0.1.0",
   "private": true,
-  "description": "Simulador multiplayer de países. Projeto em construção incremental (Fase 1: setup inicial).",
+  "description": "Simulador multiplayer de países. Projeto em construção incremental (Fase 2: monorepo e estrutura).",
   "engines": {
     "node": ">=24"
   },
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

@@ -1,0 +1,6 @@
+{
+  "name": "@nationforge/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Frontend do NationForge (Next.js). Ainda não implementado — placeholder da Fase 2, código chega na Fase 5."
+}

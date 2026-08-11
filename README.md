@@ -9,9 +9,11 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 1 — Setup inicial.** Apenas a fundação do repositório está pronta: controle de
-versão, lint, formatação e hooks de commit. Ainda não há backend, frontend, banco de
-dados ou qualquer funcionalidade de jogo — isso vem nas próximas fases.
+**Fase 2 — Monorepo e estrutura.** O repositório já tem a fundação (Fase 1: git, lint,
+formatação, hooks de commit) e agora também o esqueleto do monorepo (`apps/api`,
+`apps/web`) via npm workspaces. Os dois pacotes ainda são placeholders — sem NestJS,
+sem Next.js, sem banco de dados ou qualquer funcionalidade de jogo. Isso vem nas
+próximas fases.
 
 ## Requisitos
 
@@ -46,5 +48,11 @@ docs: update README
 
 ## Estrutura atual
 
-Nesta fase, o repositório contém apenas configuração de raiz. A estrutura de monorepo
-(`apps/`, `packages/`) será criada na Fase 2.
+```text
+apps/
+├── api/    (placeholder — NestJS chega na Fase 4)
+└── web/    (placeholder — Next.js chega na Fase 5)
+```
+
+`packages/shared` e `packages/config` (sugeridos no CLAUDE.md) ainda não existem: só
+serão criados quando houver código real para compartilhar entre `api` e `web`.
