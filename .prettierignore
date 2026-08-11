@@ -1,0 +1,9 @@
+node_modules
+dist
+build
+.next
+coverage
+package-lock.json
+
+# Documento de especificação do projeto, mantido no formato original do usuário
+CLAUDE.md
