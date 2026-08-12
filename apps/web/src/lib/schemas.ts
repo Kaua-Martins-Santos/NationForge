@@ -40,3 +40,52 @@ export const loginFormSchema = z.object({
 
 export type RegisterFormValues = z.infer<typeof registerFormSchema>;
 export type LoginFormValues = z.infer<typeof loginFormSchema>;
+
+export const GOVERNMENT_TYPES = ['DEMOCRACY', 'MONARCHY', 'DICTATORSHIP', 'REPUBLIC'] as const;
+
+/** Rótulos em português para os valores do enum do backend. */
+export const GOVERNMENT_LABELS: Record<(typeof GOVERNMENT_TYPES)[number], string> = {
+  DEMOCRACY: 'Democracia',
+  MONARCHY: 'Monarquia',
+  DICTATORSHIP: 'Ditadura',
+  REPUBLIC: 'República',
+};
+
+export const nationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  flag: z.string(),
+  capital: z.string(),
+  government: z.enum(GOVERNMENT_TYPES),
+  population: z.number(),
+  territory: z.number(),
+  gdp: z.number(),
+  treasury: z.number(),
+  happiness: z.number(),
+  stability: z.number(),
+  technology: z.number(),
+  militaryPower: z.number(),
+  infrastructure: z.number(),
+  emissions: z.number(),
+  createdAt: z.string(),
+});
+
+export type Nation = z.infer<typeof nationSchema>;
+
+export const createNationFormSchema = z.object({
+  name: z
+    .string()
+    .min(3, 'O nome do país precisa de ao menos 3 caracteres.')
+    .max(40, 'O nome do país aceita no máximo 40 caracteres.'),
+  flag: z
+    .string()
+    .min(1, 'Escolha uma bandeira.')
+    .max(16, 'A bandeira aceita no máximo 16 caracteres.'),
+  capital: z
+    .string()
+    .min(2, 'O nome da capital precisa de ao menos 2 caracteres.')
+    .max(40, 'O nome da capital aceita no máximo 40 caracteres.'),
+  government: z.enum(GOVERNMENT_TYPES),
+});
+
+export type CreateNationFormValues = z.infer<typeof createNationFormSchema>;

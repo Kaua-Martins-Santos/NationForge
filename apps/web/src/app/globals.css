@@ -1,13 +1,37 @@
 @import 'tailwindcss';
 
+/*
+ * A aplicação assume um tema escuro único e explícito (não é um flip automático
+ * do claro), então as cores são declaradas uma vez e validadas contra ESTE fundo.
+ */
 :root {
   --background: #0b0f1a;
   --foreground: #e6e8ee;
+
+  /* Superfície dos cards, um passo acima do plano da página. */
+  --surface: #131826;
+  --border: rgba(255, 255, 255, 0.1);
+
+  /* Tinta: rótulos e valores nunca usam a cor do dado. */
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+
+  /*
+   * Paleta de status, reservada para estado (nunca para "série 4").
+   * Contraste >= 3:1 contra --background, verificado com o validador.
+   * Sempre acompanhada de rótulo e valor: cor nunca carrega significado sozinha.
+   */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-critical: #d03b3b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
 }
 
 body {

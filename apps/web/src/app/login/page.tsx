@@ -34,7 +34,7 @@ export default function LoginPage() {
     }
 
     setFieldErrors({});
-    login.mutate(parsed.data, { onSuccess: () => router.push('/') });
+    login.mutate(parsed.data, { onSuccess: () => router.push('/dashboard') });
   }
 
   return (

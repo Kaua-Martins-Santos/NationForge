@@ -2,9 +2,8 @@
 
 Frontend do NationForge (Next.js).
 
-Contém o esqueleto criado na **Fase 5** e, desde a **Fase 9a**, as telas de cadastro e
-login consumindo a API de verdade. A criação do país e o painel com seus atributos
-chegam na Fase 9b.
+Contém o esqueleto criado na **Fase 5**, as telas de cadastro e login (**Fase 9a**) e,
+desde a **Fase 9b**, a fundação do país e o painel com seus atributos.
 
 ## Configuração
 
@@ -19,11 +18,41 @@ A API precisa estar rodando junto: `npm run dev:api` na raiz.
 
 ## Telas
 
-| Rota        | O que faz                                            |
-| ----------- | ---------------------------------------------------- |
-| `/`         | Mostra a sessão ativa (ou os botões de entrar/criar) |
-| `/register` | Cadastro: e-mail, nome do jogador e senha            |
-| `/login`    | Login                                                |
+| Rota           | O que faz                                                         |
+| -------------- | ----------------------------------------------------------------- |
+| `/`            | Porta de entrada; quem já tem sessão vai direto para `/dashboard` |
+| `/register`    | Cadastro: e-mail, nome do jogador e senha                         |
+| `/login`       | Login                                                             |
+| `/nations/new` | Fundação do país: nome, bandeira, capital e governo               |
+| `/dashboard`   | Painel com os atributos do país                                   |
+
+O fluxo se encadeia pelo estado, não por navegação manual: sem sessão → `/login`; com
+sessão e sem país → `/nations/new`; com país → `/dashboard`.
+
+`RequireSession` ([`components/require-session.tsx`](./src/components/require-session.tsx))
+é conveniência de UX, **não** segurança: quem controla o navegador contorna qualquer
+verificação no cliente. A garantia real está no backend, que exige o token em cada rota
+protegida.
+
+## Como o painel apresenta os números
+
+Decisões de forma, tomadas antes de escolher qualquer cor:
+
+- **Não há gráficos.** Os atributos são valores pontuais únicos, sem série temporal —
+  nada evolui até o sistema de ticks. Um gráfico exigiria um histórico que não existe, e
+  desenhá-lo significaria inventar dados. Por isso também não há indicadores de variação
+  ("+2,4%") nem sparklines.
+- **Um número-herói** (população), o valor que o painel lidera — exatamente um por tela.
+- **Stat tiles** para os demais valores, com números compactos (`1,2 mi`).
+- **Medidores** para felicidade e estabilidade, que são índices 0–100 — um valor contra
+  seu limite. A trilha vazia é um passo mais claro da mesma cor do preenchimento, para o
+  estado ser legível na barra inteira.
+- **Cor nunca carrega significado sozinha.** A severidade do medidor aparece também como
+  número e como rótulo de estado ("estável", "atenção", "crítico"). As cores de status
+  foram verificadas contra o fundo real da aplicação (contraste ≥ 3:1 e separação
+  suficiente para daltonismo), não escolhidas a olho.
+- **Rótulos e valores usam tinta de texto, nunca a cor do dado** — uma cor de status como
+  texto sobre o fundo escuro seria ilegível.
 
 ## Como a sessão funciona
 

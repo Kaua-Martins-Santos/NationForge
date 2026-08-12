@@ -37,7 +37,7 @@ export default function RegisterPage() {
     }
 
     setFieldErrors({});
-    register.mutate(parsed.data, { onSuccess: () => router.push('/') });
+    register.mutate(parsed.data, { onSuccess: () => router.push('/dashboard') });
   }
 
   return (
