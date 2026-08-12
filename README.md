@@ -9,10 +9,10 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 5 — Frontend inicial.** Já temos a fundação do repositório (Fase 1), o monorepo
-(Fase 2), o Prisma configurado (Fase 3), o backend NestJS respondendo em `GET /health`
-(Fase 4) e agora um frontend Next.js com uma página inicial. Ainda não há models no
-banco, o frontend ainda não chama a API, e nenhuma funcionalidade de jogo foi
+**Fase 6 — Autenticação.** Já temos a fundação do repositório (Fase 1), o monorepo
+(Fase 2), o Prisma configurado (Fase 3), o backend NestJS (Fase 4), o frontend Next.js
+(Fase 5) e agora registro/login de usuários com JWT. O login ainda não está vinculado a
+um país (Fase 8), o frontend ainda não chama a API, e nenhuma funcionalidade de jogo foi
 implementada — isso vem nas próximas fases.
 
 ## Requisitos
@@ -66,8 +66,11 @@ apps/
 │   │   ├── main.ts             bootstrap
 │   │   ├── app.module.ts       módulo raiz
 │   │   └── health/             GET /health
-│   ├── test/                   testes e2e (Supertest)
-│   └── prisma/schema.prisma    ainda sem models
+│   ├── src/auth/                registro, login, JWT
+│   ├── src/users/                acesso a dados de usuário
+│   ├── src/prisma/                PrismaService/PrismaModule
+│   ├── test/                     testes e2e (Supertest)
+│   └── prisma/schema.prisma      model User + migrations
 └── web/                        Next.js
     └── src/app/                página inicial + layout (Tailwind CSS)
 ```

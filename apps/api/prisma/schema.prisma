@@ -1,14 +1,28 @@
 // Prisma schema do NationForge.
 // Documentação: https://pris.ly/d/prisma-schema
 //
-// Ainda sem models: as entidades do domínio serão criadas nas fases seguintes,
-// cada uma na sua etapa.
+// Os demais domínios do jogo (nações, população, economia...) serão criados nas
+// fases seguintes, cada um na sua etapa.
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  // NestJS/ts-jest aqui rodam em CommonJS (o package.json não declara
+  // "type": "module"). Sem isso, o gerador infere ESM e usa import.meta.url,
+  // que quebra o Jest.
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
 }

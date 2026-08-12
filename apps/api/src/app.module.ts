@@ -1,13 +1,23 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { UsersModule } from './users/users.module';
 
 /**
  * Módulo raiz da aplicação.
  *
- * Os módulos de domínio do jogo (usuários, países, economia, população...)
- * serão registrados aqui conforme forem implementados, cada um na sua fase.
+ * Os módulos de domínio do jogo (nações, economia, população...) serão
+ * registrados aqui conforme forem implementados, cada um na sua fase.
  */
 @Module({
-  imports: [HealthModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    HealthModule,
+    UsersModule,
+    AuthModule,
+  ],
 })
 export class AppModule {}
