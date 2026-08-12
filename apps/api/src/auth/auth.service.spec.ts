@@ -1,15 +1,23 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import * as bcrypt from 'bcrypt';
 import type { User } from '../../generated/prisma/client';
+import { PasswordService } from '../users/password.service';
 import { UsersService } from '../users/users.service';
-import { AuthService } from './auth.service';
+import { AuthService, type AuthResult } from './auth.service';
+import type { CreateUserData } from '../users/users.service';
+
+const VALID_CREDENTIALS = {
+  email: 'jogador@nationforge.dev',
+  displayName: 'Jogador',
+  password: 'senha-forte-123',
+};
 
 function buildUser(overrides: Partial<User> = {}): User {
   return {
     id: 'user-1',
-    email: 'jogador@nationforge.dev',
+    email: VALID_CREDENTIALS.email,
+    displayName: VALID_CREDENTIALS.displayName,
     passwordHash: '',
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -19,69 +27,83 @@ function buildUser(overrides: Partial<User> = {}): User {
 
 describe('AuthService', () => {
   let authService: AuthService;
-  let usersService: { findByEmail: jest.Mock; create: jest.Mock };
+  let usersService: {
+    findByEmail: jest.Mock;
+    findByDisplayName: jest.Mock;
+    create: jest.Mock;
+  };
+  let passwordService: PasswordService;
 
   beforeEach(async () => {
-    usersService = { findByEmail: jest.fn(), create: jest.fn() };
+    usersService = {
+      findByEmail: jest.fn().mockResolvedValue(null),
+      findByDisplayName: jest.fn().mockResolvedValue(null),
+      create: jest.fn(),
+    };
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         AuthService,
+        PasswordService,
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: { sign: () => 'fake-jwt-token' } },
       ],
     }).compile();
 
     authService = moduleRef.get(AuthService);
+    passwordService = moduleRef.get(PasswordService);
   });
 
   describe('register', () => {
     it('cria o usuário com a senha hasheada e retorna um token', async () => {
-      usersService.findByEmail.mockResolvedValue(null);
-      usersService.create.mockImplementation((email: string, passwordHash: string) =>
-        Promise.resolve(buildUser({ email, passwordHash })),
+      usersService.create.mockImplementation((data: CreateUserData) =>
+        Promise.resolve(buildUser(data)),
       );
 
-      const result = await authService.register({
-        email: 'jogador@nationforge.dev',
-        password: 'senha-forte-123',
-      });
+      const result: AuthResult = await authService.register(VALID_CREDENTIALS);
 
       expect(result).toEqual({ accessToken: 'fake-jwt-token' });
 
-      const [, storedHash] = usersService.create.mock.calls[0] as [string, string];
-      expect(storedHash).not.toBe('senha-forte-123');
-      expect(await bcrypt.compare('senha-forte-123', storedHash)).toBe(true);
+      const [created] = usersService.create.mock.calls[0] as [CreateUserData];
+      expect(created.passwordHash).not.toBe(VALID_CREDENTIALS.password);
+      await expect(
+        passwordService.compare(VALID_CREDENTIALS.password, created.passwordHash),
+      ).resolves.toBe(true);
     });
 
     it('rejeita e-mail já cadastrado', async () => {
       usersService.findByEmail.mockResolvedValue(buildUser());
 
-      await expect(
-        authService.register({ email: 'jogador@nationforge.dev', password: 'senha-forte-123' }),
-      ).rejects.toBeInstanceOf(ConflictException);
+      await expect(authService.register(VALID_CREDENTIALS)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('rejeita displayName já em uso', async () => {
+      usersService.findByDisplayName.mockResolvedValue(buildUser({ id: 'outro-usuario' }));
+
+      await expect(authService.register(VALID_CREDENTIALS)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
     });
   });
 
   describe('login', () => {
     it('autentica com a senha correta', async () => {
-      const passwordHash = await bcrypt.hash('senha-forte-123', 4);
+      const passwordHash = await passwordService.hash(VALID_CREDENTIALS.password);
       usersService.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
 
-      const result = await authService.login({
-        email: 'jogador@nationforge.dev',
-        password: 'senha-forte-123',
-      });
+      const result = await authService.login(VALID_CREDENTIALS);
 
       expect(result).toEqual({ accessToken: 'fake-jwt-token' });
     });
 
     it('rejeita senha incorreta', async () => {
-      const passwordHash = await bcrypt.hash('senha-forte-123', 4);
+      const passwordHash = await passwordService.hash(VALID_CREDENTIALS.password);
       usersService.findByEmail.mockResolvedValue(buildUser({ passwordHash }));
 
       await expect(
-        authService.login({ email: 'jogador@nationforge.dev', password: 'senha-errada' }),
+        authService.login({ email: VALID_CREDENTIALS.email, password: 'senha-errada' }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 

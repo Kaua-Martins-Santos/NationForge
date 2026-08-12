@@ -9,7 +9,11 @@ describe('Auth (e2e)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
 
-  const email = `e2e-auth-${Date.now()}@nationforge.dev`;
+  // base36 mantém o sufixo curto o bastante para caber no limite de 20
+  // caracteres do displayName, mesmo com sufixos extras nos testes.
+  const suffix = Date.now().toString(36);
+  const email = `e2e-auth-${suffix}@nationforge.dev`;
+  const displayName = `auth${suffix}`;
   const password = 'senha-forte-123';
 
   beforeAll(async () => {
@@ -25,27 +29,51 @@ describe('Auth (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email } });
+    await prisma.user.deleteMany({ where: { email: { contains: `e2e-auth-${suffix}` } } });
     await app.close();
   });
 
   it('registra um novo usuário e retorna um token', async () => {
     const response = await request(app.getHttpServer())
       .post('/auth/register')
-      .send({ email, password })
+      .send({ email, displayName, password })
       .expect(201);
 
     expect(response.body).toHaveProperty('accessToken');
   });
 
   it('rejeita registro com e-mail já cadastrado', async () => {
-    await request(app.getHttpServer()).post('/auth/register').send({ email, password }).expect(409);
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, displayName: `${displayName}b`, password })
+      .expect(409);
+  });
+
+  it('rejeita registro com displayName já em uso', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email: `outro-${email}`, displayName, password })
+      .expect(409);
   });
 
   it('rejeita registro com senha curta', async () => {
     await request(app.getHttpServer())
       .post('/auth/register')
-      .send({ email: `outro-${email}`, password: '123' })
+      .send({ email: `curto-${email}`, displayName: `${displayName}c`, password: '123' })
+      .expect(400);
+  });
+
+  it('rejeita registro com displayName inválido', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email: `inv-${email}`, displayName: 'nome com espaço', password })
+      .expect(400);
+  });
+
+  it('rejeita campos não previstos no corpo da requisição', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email: `extra-${email}`, displayName: `${displayName}d`, password, isAdmin: true })
       .expect(400);
   });
 

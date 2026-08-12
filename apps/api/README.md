@@ -2,9 +2,9 @@
 
 Backend do NationForge (NestJS).
 
-Contém o esqueleto da aplicação (Fase 4), acesso a dados via Prisma (Fase 3) e
-autenticação por e-mail/senha com JWT (Fase 6). Nenhum outro módulo de domínio do jogo
-foi implementado ainda.
+Contém o esqueleto da aplicação (Fase 4), acesso a dados via Prisma (Fase 3),
+autenticação por e-mail/senha com JWT (Fase 6) e o perfil do usuário (Fase 7). Nenhum
+outro módulo de domínio do jogo foi implementado ainda.
 
 ## Executando
 
@@ -17,11 +17,21 @@ A API sobe em `http://localhost:3333` (porta configurável via `PORT`).
 Endpoints disponíveis:
 
 ```text
-GET  /health          →  { "status": "ok", "timestamp": "..." }
-POST /auth/register    body: { email, password }  →  { "accessToken": "..." }
-POST /auth/login       body: { email, password }  →  { "accessToken": "..." }
-GET  /auth/me          header: Authorization: Bearer <token>  →  { userId, email }
+GET   /health              →  { status, timestamp }
+
+POST  /auth/register        { email, displayName, password }  →  201 { accessToken }
+POST  /auth/login           { email, password }               →  200 { accessToken }
+GET   /auth/me              🔒                                 →  { userId, email }
+
+GET   /users/me             🔒                                 →  { id, email, displayName, createdAt }
+PATCH /users/me             🔒 { displayName }                 →  perfil atualizado
+PATCH /users/me/password    🔒 { currentPassword, newPassword } →  204 (sem corpo)
 ```
+
+🔒 = exige `Authorization: Bearer <token>`.
+
+`GET /auth/me` lê apenas o conteúdo do token (rápido, para checar se a sessão é
+válida). `GET /users/me` consulta o banco e devolve o perfil atualizado.
 
 ## Banco de dados
 
@@ -60,7 +70,15 @@ A partir da Fase 6, mudanças de schema usam **migrations versionadas**
 (`prisma migrate dev`), não mais `db push`: o schema agora tem histórico real, e cada
 alteração precisa ficar registrada em [`prisma/migrations/`](./prisma/migrations/).
 
-Model atual: `User` (id, email, passwordHash, createdAt, updatedAt).
+Model atual: `User` (id, email, displayName, passwordHash, createdAt, updatedAt).
+`email` é credencial privada de login; `displayName` é o nome público do jogador. Ambos
+são únicos.
+
+> Nota: `prisma migrate dev` é interativo e falha em terminais não interativos quando há
+> avisos (ex.: adicionar uma constraint `UNIQUE`). Nesses casos, gere o SQL com
+> `prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script`,
+> salve em `prisma/migrations/<timestamp>_<nome>/migration.sql` e aplique com
+> `prisma migrate deploy`.
 
 ## Decisões da Fase 6 (auth)
 
@@ -72,6 +90,25 @@ Model atual: `User` (id, email, passwordHash, createdAt, updatedAt).
 - **Mesma mensagem de erro** para "e-mail não existe" e "senha errada" no login, para
   não revelar quais e-mails estão cadastrados.
 - Login ainda não está vinculado a um país — isso é a Fase 8.
+
+## Decisões da Fase 7 (usuários)
+
+- **`toPublicUser()` explícito** ([`public-user.ts`](./src/users/public-user.ts)) em vez
+  de serialização automática por decorators: o que sai numa resposta é uma lista
+  visível no código, então `passwordHash` só vazaria por decisão deliberada.
+- **Troca de senha exige a senha atual** — sem isso, um token vazado permitiria
+  sequestro definitivo da conta.
+- **Senha atual incorreta retorna 400, não 401.** O usuário está autenticado; um 401
+  faria clientes com interceptor de "sessão expirada" deslogarem o jogador por um erro
+  de digitação.
+- **`PasswordService`** centraliza bcrypt e o custo do hash, usado tanto por `auth`
+  (registro/login) quanto por `users` (troca de senha) — evita as duas regras
+  divergirem com o tempo.
+- **Só existem rotas `/users/me`.** Ler ou alterar outro usuário por id exigiria
+  autorização por papéis, que o jogo ainda não tem; a rota existir sem isso seria uma
+  brecha.
+- Não implementados: exclusão de conta, avatar, listagem pública de jogadores, papéis
+  e permissões.
 
 ### Armadilhas do Prisma 7 que apareceram aqui (documentado para não repetir)
 
