@@ -5,7 +5,8 @@ import { employedFrom } from './population-growth';
  * Estado demográfico pronto para sair em JSON.
  *
  * `growthCarryMicro` fica de fora: é detalhe interno da simulação, sem
- * significado para quem joga.
+ * significado para quem joga. O marco temporal também não está aqui — ele é do
+ * país inteiro, e sai uma vez em `PublicNation.simulatedUntil`.
  */
 export interface PublicPopulation {
   total: number;
@@ -17,7 +18,6 @@ export interface PublicPopulation {
   deathRatePerThousand: number;
   health: number;
   education: number;
-  simulatedUntil: string;
 }
 
 export function toPublicPopulation(state: PopulationState): PublicPopulation {
@@ -34,6 +34,5 @@ export function toPublicPopulation(state: PopulationState): PublicPopulation {
     deathRatePerThousand: state.deathRatePerThousand,
     health: state.health,
     education: state.education,
-    simulatedUntil: state.simulatedUntil.toISOString(),
   };
 }

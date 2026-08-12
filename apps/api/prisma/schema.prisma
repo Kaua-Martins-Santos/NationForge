@@ -66,25 +66,37 @@ model Nation {
   // seria deixar o jogador escolher o próprio tesouro (CLAUDE.md seção 33).
   territory Int
 
-  // Decimal (e não float) para valores monetários: os ticks farão milhares de
-  // operações sobre estes campos, e float acumula erro de arredondamento. A
-  // seção 25 do CLAUDE.md pede determinismo.
-  gdp      Decimal @db.Decimal(18, 2)
-  treasury Decimal @db.Decimal(18, 2)
-
   // Índices de 0 a 100.
   happiness Int
   stability Int
+
+  /// Resto fracionário da felicidade, em milionésimos de ponto.
+  ///
+  /// Sem ele a mecânica de impostos não funcionaria: a variação de um tick é da
+  /// ordem de 0,003 ponto, que arredondaria para zero todas as vezes — o imposto
+  /// nunca chegaria a incomodar ninguém. Mesma técnica dos demais `carry`.
+  happinessCarryMicro Int @default(0)
 
   technology     Int
   militaryPower  Int
   infrastructure Int
   emissions      Int
 
+  /// Marco temporal da simulação: até quando os ticks já foram aplicados.
+  ///
+  /// Mora em Nation, e não em um domínio, porque o tempo é do país inteiro:
+  /// população e economia avançam juntas, no mesmo laço, e um marco por domínio
+  /// permitiria que saíssem de sincronia (ver `simulation/simulate.ts`).
+  ///
+  /// Avança em múltiplos exatos da duração do tick, nunca para "agora" — é o que
+  /// impede o jogador de ganhar recursos recarregando a página (seção 26).
+  simulatedUntil DateTime
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   populationState PopulationState?
+  economyState    EconomyState?
 
   @@map("nations")
 }
@@ -119,14 +131,49 @@ model PopulationState {
   health    Int
   education Int
 
-  /// Marco temporal da simulação: até quando o crescimento já foi aplicado.
-  ///
-  /// Avança em múltiplos exatos da duração do tick, nunca para "agora" — é o que
-  /// impede o jogador de ganhar população recarregando a página (seção 26).
-  simulatedUntil DateTime
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("population_states")
+}
+
+/// Estado econômico de um país — o domínio Economia (CLAUDE.md seção 13).
+///
+/// O PIB **não** mora aqui: é derivado da força de trabalho e da produtividade a
+/// cada leitura (ver `economy-calculations.ts`), pelo mesmo motivo que o emprego
+/// é derivado na população — um campo persistido seria uma segunda fonte da
+/// verdade para um número que já é consequência de outros.
+///
+/// Só persiste o que é acumulado (tesouro) ou escolhido pelo jogador (alíquota).
+model EconomyState {
+  id       String @id @default(uuid())
+  nationId String @unique
+  nation   Nation @relation(fields: [nationId], references: [id], onDelete: Cascade)
+
+  /// Tesouro nacional, em centavos da moeda do jogo.
+  ///
+  /// BigInt de centavos, e não Decimal: os ticks fazem milhares de somas sobre
+  /// este campo, e aritmética inteira é exata por construção — sem depender de
+  /// arredondamento correto a cada passo. A seção 25 pede determinismo.
+  ///
+  /// Pode ficar negativo: um país gastando mais do que arrecada entra no
+  /// vermelho. Dívida pública formal (juros, limite, calote) é uma fatia
+  /// posterior da economia.
+  treasuryCents BigInt
+
+  /// Resto fracionário do saldo, em milionésimos de centavo (0 a 999999).
+  ///
+  /// Mesma técnica do `growthCarryMicro` da população, pelo mesmo motivo:
+  /// arredondar a cada tick descartaria a fração, e a frequência com que o
+  /// jogador abre o jogo mudaria quanto ele arrecada.
+  treasuryCarryMicro Int @default(0)
+
+  /// Alíquota de imposto, em pontos percentuais (0 a 100). É a decisão
+  /// econômica do jogador: mais receita, menos felicidade (seção 13).
+  taxRate Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("economy_states")
 }

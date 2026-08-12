@@ -1,10 +1,8 @@
+import { TICKS_PER_YEAR } from '../simulation/tick';
 import {
-  countElapsedTicks,
+  applyPopulationTick,
   employedFrom,
   employmentRate,
-  MAX_CATCH_UP_TICKS,
-  projectPopulation,
-  TICK_DURATION_MS,
   type PopulationContext,
   type PopulationSnapshot,
 } from './population-growth';
@@ -15,66 +13,93 @@ const BASE_SNAPSHOT: PopulationSnapshot = {
   birthRatePerThousand: 18,
   deathRatePerThousand: 8,
   health: 50,
+  education: 10,
 };
 
 /** Felicidade 50 é o ponto neutro: nem atrai nem expulsa habitantes. */
 const NEUTRAL_CONTEXT: PopulationContext = { happiness: 50 };
 
-const START = new Date('2026-01-01T00:00:00.000Z');
+/**
+ * Aplica N ticks seguidos. As propriedades do laço completo (anti-exploit,
+ * marco temporal) são testadas no orquestrador — aqui o laço é só uma
+ * conveniência para observar efeitos que levam um ano para aparecer.
+ */
+function runTicks(
+  snapshot: PopulationSnapshot,
+  context: PopulationContext,
+  ticks: number,
+): { snapshot: PopulationSnapshot; births: number; deaths: number; migration: number } {
+  let current = snapshot;
+  let births = 0;
+  let deaths = 0;
+  let migration = 0;
 
-function hoursAfterStart(hours: number): Date {
-  return new Date(START.getTime() + hours * TICK_DURATION_MS);
+  for (let tick = 0; tick < ticks; tick += 1) {
+    const result = applyPopulationTick(current, context);
+
+    current = result.snapshot;
+    births += result.delta.births;
+    deaths += result.delta.deaths;
+    migration += result.delta.migration;
+  }
+
+  return { snapshot: current, births, deaths, migration };
 }
 
-describe('countElapsedTicks', () => {
-  it('conta apenas ticks inteiros', () => {
-    expect(countElapsedTicks(START, START)).toBe(0);
-    expect(countElapsedTicks(START, new Date(START.getTime() + 59 * 60 * 1000))).toBe(0);
-    expect(countElapsedTicks(START, hoursAfterStart(1))).toBe(1);
-    expect(countElapsedTicks(START, new Date(START.getTime() + 90 * 60 * 1000))).toBe(1);
-    expect(countElapsedTicks(START, hoursAfterStart(5))).toBe(5);
-  });
-
-  it('ignora tempo negativo (relógio para trás)', () => {
-    expect(countElapsedTicks(START, hoursAfterStart(-10))).toBe(0);
-  });
-
-  it('limita o catch-up de uma ausência muito longa', () => {
-    expect(countElapsedTicks(START, hoursAfterStart(MAX_CATCH_UP_TICKS + 5000))).toBe(
-      MAX_CATCH_UP_TICKS,
+describe('applyPopulationTick', () => {
+  it('é determinístico: mesmas entradas, mesma saída', () => {
+    expect(applyPopulationTick(BASE_SNAPSHOT, NEUTRAL_CONTEXT)).toEqual(
+      applyPopulationTick(BASE_SNAPSHOT, NEUTRAL_CONTEXT),
     );
   });
-});
 
-describe('projectPopulation', () => {
-  it('não muda nada antes de completar um tick', () => {
-    const result = projectPopulation(
-      BASE_SNAPSHOT,
-      NEUTRAL_CONTEXT,
-      START,
-      new Date(START.getTime() + 59 * 60 * 1000),
-    );
+  it('não muta o snapshot recebido', () => {
+    applyPopulationTick(BASE_SNAPSHOT, NEUTRAL_CONTEXT);
 
-    expect(result.total).toBe(BASE_SNAPSHOT.total);
-    expect(result.appliedTicks).toBe(0);
-    // O marco não avança: o tempo parcial continua valendo depois.
-    expect(result.simulatedUntil).toBe(START);
+    expect(BASE_SNAPSHOT.total).toBe(1_000_000n);
+    expect(BASE_SNAPSHOT.growthCarryMicro).toBe(0);
   });
 
-  it('avança o marco em múltiplos exatos do tick, nunca para "agora"', () => {
-    // 3h30: apenas 3 ticks valem, e a meia hora sobrante fica para depois.
-    const now = new Date(START.getTime() + 3.5 * TICK_DURATION_MS);
-    const result = projectPopulation(BASE_SNAPSHOT, NEUTRAL_CONTEXT, START, now);
+  /**
+   * Num país pequeno, um tick move muito menos de uma pessoa: o crescimento
+   * inteiro vive no resto acumulado. É exatamente por isso que o resto precisa
+   * ser persistido — sem ele, esta fração seria descartada a cada leitura e um
+   * país assim nunca cresceria.
+   */
+  it('acumula no resto o crescimento menor que um habitante', () => {
+    const vilarejo: PopulationSnapshot = { ...BASE_SNAPSHOT, total: 1_000n };
 
-    expect(result.appliedTicks).toBe(3);
-    expect(result.simulatedUntil).toEqual(hoursAfterStart(3));
-    expect(result.simulatedUntil.getTime()).toBeLessThan(now.getTime());
+    const result = applyPopulationTick(vilarejo, NEUTRAL_CONTEXT);
+
+    expect(result.snapshot.total).toBe(vilarejo.total);
+    expect(result.snapshot.growthCarryMicro).toBeGreaterThan(0);
+  });
+
+  it('o resto acumulado vira habitante inteiro depois de ticks suficientes', () => {
+    const vilarejo: PopulationSnapshot = { ...BASE_SNAPSHOT, total: 1_000n };
+
+    expect(runTicks(vilarejo, NEUTRAL_CONTEXT, TICKS_PER_YEAR).snapshot.total).toBeGreaterThan(
+      vilarejo.total,
+    );
+  });
+
+  it('mantém o resto sempre em [0, 1_000_000)', () => {
+    const shrinking = { ...BASE_SNAPSHOT, birthRatePerThousand: 2, deathRatePerThousand: 30 };
+
+    let current = shrinking;
+
+    for (let tick = 0; tick < 100; tick += 1) {
+      current = applyPopulationTick(current, NEUTRAL_CONTEXT).snapshot;
+
+      expect(current.growthCarryMicro).toBeGreaterThanOrEqual(0);
+      expect(current.growthCarryMicro).toBeLessThan(1_000_000);
+    }
   });
 
   it('cresce quando a natalidade supera a mortalidade', () => {
-    const result = projectPopulation(BASE_SNAPSHOT, NEUTRAL_CONTEXT, START, hoursAfterStart(8760));
+    const result = runTicks(BASE_SNAPSHOT, NEUTRAL_CONTEXT, TICKS_PER_YEAR);
 
-    expect(result.total).toBeGreaterThan(BASE_SNAPSHOT.total);
+    expect(result.snapshot.total).toBeGreaterThan(BASE_SNAPSHOT.total);
     expect(result.births).toBeGreaterThan(result.deaths);
   });
 
@@ -85,136 +110,41 @@ describe('projectPopulation', () => {
       deathRatePerThousand: 20,
     };
 
-    const result = projectPopulation(dying, NEUTRAL_CONTEXT, START, hoursAfterStart(8760));
+    const result = runTicks(dying, NEUTRAL_CONTEXT, TICKS_PER_YEAR);
 
-    expect(result.total).toBeLessThan(BASE_SNAPSHOT.total);
-  });
-
-  /**
-   * A propriedade central contra exploits: como cada tick é aplicado
-   * individualmente, a frequência com que o jogador recarrega a página não pode
-   * alterar o resultado.
-   */
-  it('dá o mesmo resultado aplicando 24 ticks de uma vez ou 1 tick 24 vezes', () => {
-    const deUmaVez = projectPopulation(BASE_SNAPSHOT, NEUTRAL_CONTEXT, START, hoursAfterStart(24));
-
-    let snapshot = BASE_SNAPSHOT;
-    let marco = START;
-
-    for (let hora = 1; hora <= 24; hora += 1) {
-      const passo = projectPopulation(snapshot, NEUTRAL_CONTEXT, marco, hoursAfterStart(hora));
-
-      // O resto fracionário precisa atravessar as chamadas — é exatamente o que
-      // faz os dois caminhos coincidirem.
-      snapshot = {
-        ...snapshot,
-        total: passo.total,
-        growthCarryMicro: passo.growthCarryMicro,
-      };
-      marco = passo.simulatedUntil;
-    }
-
-    expect(snapshot.total).toBe(deUmaVez.total);
-    expect(snapshot.growthCarryMicro).toBe(deUmaVez.growthCarryMicro);
-    expect(marco).toEqual(deUmaVez.simulatedUntil);
-  });
-
-  it('recarregar sem completar um tick não gera população', () => {
-    let snapshot = BASE_SNAPSHOT;
-    let marco = START;
-
-    // 10 leituras dentro da mesma hora — um jogador insistindo em F5.
-    for (let tentativa = 0; tentativa < 10; tentativa += 1) {
-      const passo = projectPopulation(
-        snapshot,
-        NEUTRAL_CONTEXT,
-        marco,
-        new Date(START.getTime() + 30 * 60 * 1000),
-      );
-
-      snapshot = {
-        ...snapshot,
-        total: passo.total,
-        growthCarryMicro: passo.growthCarryMicro,
-      };
-      marco = passo.simulatedUntil;
-    }
-
-    expect(snapshot.total).toBe(BASE_SNAPSHOT.total);
-    expect(snapshot.growthCarryMicro).toBe(0);
-  });
-
-  it('é determinístico: mesmas entradas, mesma saída', () => {
-    const primeira = projectPopulation(BASE_SNAPSHOT, NEUTRAL_CONTEXT, START, hoursAfterStart(100));
-    const segunda = projectPopulation(BASE_SNAPSHOT, NEUTRAL_CONTEXT, START, hoursAfterStart(100));
-
-    expect(primeira).toEqual(segunda);
+    expect(result.snapshot.total).toBeLessThan(BASE_SNAPSHOT.total);
   });
 
   describe('saúde', () => {
     it('saúde alta gera mais nascimentos e menos mortes que saúde baixa', () => {
-      const saudavel = projectPopulation(
-        { ...BASE_SNAPSHOT, health: 100 },
-        NEUTRAL_CONTEXT,
-        START,
-        hoursAfterStart(8760),
-      );
-      const doente = projectPopulation(
-        { ...BASE_SNAPSHOT, health: 0 },
-        NEUTRAL_CONTEXT,
-        START,
-        hoursAfterStart(8760),
-      );
+      const saudavel = runTicks({ ...BASE_SNAPSHOT, health: 100 }, NEUTRAL_CONTEXT, TICKS_PER_YEAR);
+      const doente = runTicks({ ...BASE_SNAPSHOT, health: 0 }, NEUTRAL_CONTEXT, TICKS_PER_YEAR);
 
       expect(saudavel.births).toBeGreaterThan(doente.births);
       expect(saudavel.deaths).toBeLessThan(doente.deaths);
-      expect(saudavel.total).toBeGreaterThan(doente.total);
+      expect(saudavel.snapshot.total).toBeGreaterThan(doente.snapshot.total);
     });
   });
 
   describe('migração', () => {
     it('felicidade neutra não move ninguém', () => {
-      const result = projectPopulation(
-        BASE_SNAPSHOT,
-        { happiness: 50 },
-        START,
-        hoursAfterStart(8760),
-      );
-
-      expect(result.migration).toBe(0n);
+      expect(runTicks(BASE_SNAPSHOT, { happiness: 50 }, TICKS_PER_YEAR).migration).toBe(0);
     });
 
     it('felicidade alta atrai imigrantes', () => {
-      const result = projectPopulation(
-        BASE_SNAPSHOT,
-        { happiness: 100 },
-        START,
-        hoursAfterStart(8760),
+      expect(runTicks(BASE_SNAPSHOT, { happiness: 100 }, TICKS_PER_YEAR).migration).toBeGreaterThan(
+        0,
       );
-
-      expect(result.migration).toBeGreaterThan(0n);
     });
 
     it('país infeliz perde habitantes para a emigração', () => {
-      const result = projectPopulation(
-        BASE_SNAPSHOT,
-        { happiness: 0 },
-        START,
-        hoursAfterStart(8760),
-      );
-
-      expect(result.migration).toBeLessThan(0n);
+      expect(runTicks(BASE_SNAPSHOT, { happiness: 0 }, TICKS_PER_YEAR).migration).toBeLessThan(0);
     });
 
     it('infelicidade extrema pode reverter o crescimento natural', () => {
-      const infeliz = projectPopulation(
-        BASE_SNAPSHOT,
-        { happiness: 0 },
-        START,
-        hoursAfterStart(8760),
-      );
+      const infeliz = runTicks(BASE_SNAPSHOT, { happiness: 0 }, TICKS_PER_YEAR);
 
-      expect(infeliz.total).toBeLessThan(BASE_SNAPSHOT.total);
+      expect(infeliz.snapshot.total).toBeLessThan(BASE_SNAPSHOT.total);
     });
   });
 
@@ -225,11 +155,12 @@ describe('projectPopulation', () => {
       birthRatePerThousand: 0,
       deathRatePerThousand: 999,
       health: 0,
+      education: 0,
     };
 
-    const result = projectPopulation(colapso, { happiness: 0 }, START, hoursAfterStart(8760));
+    const result = runTicks(colapso, { happiness: 0 }, TICKS_PER_YEAR);
 
-    expect(result.total).toBeGreaterThanOrEqual(0n);
+    expect(result.snapshot.total).toBeGreaterThanOrEqual(0n);
   });
 });
 
