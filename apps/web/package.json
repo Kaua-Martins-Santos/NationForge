@@ -4,9 +4,11 @@
   "private": true,
   "description": "Frontend do NationForge (Next.js). Esqueleto inicial da Fase 5; telas do jogo chegam nas fases seguintes.",
   "dependencies": {
+    "@tanstack/react-query": "^5.101.4",
     "next": "^16.3.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
   },
   "scripts": {
     "dev": "next dev",

@@ -1,8 +1,9 @@
 import type { INestApplication } from '@nestjs/common';
-import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { AUTH_COOKIE_NAME } from '../src/auth/auth-cookie';
+import { configureApp } from '../src/configure-app';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Auth (e2e)', () => {
@@ -22,7 +23,7 @@ describe('Auth (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+    configureApp(app);
     await app.init();
 
     prisma = moduleRef.get(PrismaService);
@@ -111,5 +112,66 @@ describe('Auth (e2e)', () => {
       .expect(200);
 
     expect(meResponse.body).toMatchObject({ email });
+  });
+
+  describe('cookie de sessão', () => {
+    function readAuthCookie(headers: Record<string, unknown>): string {
+      const rawCookies = headers['set-cookie'];
+      const cookies = Array.isArray(rawCookies) ? (rawCookies as string[]) : [];
+      const authCookie = cookies.find((cookie) => cookie.startsWith(`${AUTH_COOKIE_NAME}=`));
+
+      expect(authCookie).toBeDefined();
+
+      return authCookie as string;
+    }
+
+    it('login envia o token em cookie httpOnly', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password })
+        .expect(200);
+
+      const authCookie = readAuthCookie(response.headers as Record<string, unknown>);
+
+      // httpOnly é o ponto central da decisão: sem ele, um XSS leria o token.
+      expect(authCookie).toContain('HttpOnly');
+      expect(authCookie).toContain('SameSite=Lax');
+    });
+
+    it('registro também já autentica via cookie', async () => {
+      const novoEmail = `e2e-auth-${suffix}-cookie@nationforge.dev`;
+
+      const response = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email: novoEmail, displayName: `${displayName}ck`, password })
+        .expect(201);
+
+      readAuthCookie(response.headers as Record<string, unknown>);
+    });
+
+    it('autentica em rota protegida usando apenas o cookie (sem header)', async () => {
+      const loginResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password })
+        .expect(200);
+
+      const authCookie = readAuthCookie(loginResponse.headers as Record<string, unknown>);
+
+      const meResponse = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Cookie', authCookie)
+        .expect(200);
+
+      expect(meResponse.body).toMatchObject({ email });
+    });
+
+    it('logout limpa o cookie e funciona sem estar autenticado', async () => {
+      const response = await request(app.getHttpServer()).post('/auth/logout').expect(204);
+
+      const rawCookies = (response.headers as Record<string, unknown>)['set-cookie'];
+      const cookies = Array.isArray(rawCookies) ? (rawCookies as string[]) : [];
+
+      expect(cookies.some((cookie) => cookie.startsWith(`${AUTH_COOKIE_NAME}=;`))).toBe(true);
+    });
   });
 });

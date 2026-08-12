@@ -1,18 +1,25 @@
 import 'reflect-metadata';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { configureApp } from './configure-app';
 
 const DEFAULT_PORT = 3333;
+const DEFAULT_WEB_ORIGIN = 'http://localhost:3000';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
 
-  // Regras de negócio não devem confiar no que chega do frontend (seção 33 do
-  // CLAUDE.md). O ValidationPipe global rejeita qualquer request cujo corpo
-  // não bata com os decorators do DTO, sem precisar validar campo a campo em
-  // cada controller.
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+  configureApp(app);
+
+  // O frontend roda em outra porta, então precisa de CORS. `credentials: true` é
+  // obrigatório para o navegador enviar e aceitar o cookie de sessão — e, com
+  // credentials, a origem precisa ser explícita: o coringa "*" é rejeitado pelo
+  // próprio navegador nesse modo.
+  app.enableCors({
+    origin: process.env.WEB_ORIGIN ?? DEFAULT_WEB_ORIGIN,
+    credentials: true,
+  });
 
   const port = Number(process.env.PORT ?? DEFAULT_PORT);
   await app.listen(port);

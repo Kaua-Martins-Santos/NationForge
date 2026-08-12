@@ -20,8 +20,9 @@ Endpoints disponíveis:
 ```text
 GET   /health              →  { status, timestamp }
 
-POST  /auth/register        { email, displayName, password }  →  201 { accessToken }
-POST  /auth/login           { email, password }               →  200 { accessToken }
+POST  /auth/register        { email, displayName, password }  →  201 { accessToken } + cookie
+POST  /auth/login           { email, password }               →  200 { accessToken } + cookie
+POST  /auth/logout                                            →  204 (limpa o cookie)
 GET   /auth/me              🔒                                 →  { userId, email }
 
 GET   /users/me             🔒                                 →  { id, email, displayName, createdAt }
@@ -32,7 +33,8 @@ POST  /nations              🔒 { name, flag, capital, government } →  201 pa
 GET   /nations/me           🔒                                 →  país do jogador (404 se não tem)
 ```
 
-🔒 = exige `Authorization: Bearer <token>`.
+🔒 = exige autenticação, aceita **cookie de sessão** (usado pelo navegador) **ou**
+`Authorization: Bearer <token>` (útil para curl, Postman e testes).
 
 `GET /auth/me` lê apenas o conteúdo do token (rápido, para checar se a sessão é
 válida). `GET /users/me` consulta o banco e devolve o perfil atualizado.
@@ -141,6 +143,26 @@ Models atuais:
   storage, validação de arquivo e CDN, nada disso necessário para o país existir.
 - **Não existe rota para ver o país de outro jogador.** Visualização pública chega com
   diplomacia (Fase 22) e rankings (Fase 27), que definirão o que é legítimo expor.
+
+## Decisões da Fase 9a (sessão no navegador)
+
+- **O JWT vai num cookie `httpOnly` + `SameSite=Lax`**, não em `localStorage`. JavaScript
+  não consegue ler o token, então um XSS futuro não rouba a sessão. O `SameSite=Lax`
+  cobre os casos usuais de CSRF sem precisarmos de um token anti-CSRF separado nesta
+  fase.
+- **O corpo continua devolvendo `accessToken`.** O navegador ignora e usa o cookie; o
+  campo serve a clientes fora do navegador (curl, Postman, testes e2e).
+- **`POST /auth/logout` existe porque o cookie é httpOnly** — o frontend não pode
+  apagá-lo. A rota não exige autenticação: sair deve funcionar mesmo com token expirado.
+- **`AuthCookieService` deriva o `maxAge` do cookie da mesma variável `JWT_EXPIRES_IN`**
+  que define a expiração do token. Configurados em lugares separados, cookie e token
+  poderiam expirar em momentos diferentes e a sessão falharia de forma confusa.
+- **CORS com `credentials: true` e origem explícita** (`WEB_ORIGIN`). Com credentials, o
+  navegador rejeita o coringa `*`.
+- **[`configure-app.ts`](./src/configure-app.ts) é compartilhado entre `main.ts` e os
+  testes e2e.** Antes cada teste montava a aplicação por conta própria — o que permitia
+  um middleware existir só no `main.ts`, com os testes passando enquanto o servidor real
+  estava mal configurado (ou o contrário).
 
 ### Armadilhas do Prisma 7 que apareceram aqui (documentado para não repetir)
 

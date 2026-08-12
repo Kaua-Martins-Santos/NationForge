@@ -1,5 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
-import { ValidationPipe } from '@nestjs/common';
+import { configureApp } from '../src/configure-app';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -23,7 +23,7 @@ describe('Users (e2e)', () => {
     }).compile();
 
     app = moduleRef.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+    configureApp(app);
     await app.init();
 
     prisma = moduleRef.get(PrismaService);

@@ -9,14 +9,17 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 8 — Criação de países.** Já temos a fundação do repositório (Fase 1), o monorepo
-(Fase 2), o Prisma (Fase 3), o backend NestJS (Fase 4), o frontend Next.js (Fase 5),
-autenticação com JWT (Fase 6), o perfil do jogador (Fase 7) e agora a criação do país,
-com seus atributos iniciais definidos pelo servidor.
+**Fase 9a — Frontend autenticado.** O frontend agora **consome a API de verdade**: já é
+possível criar conta, entrar e sair pelo navegador. A sessão usa um cookie `httpOnly`, e
+não `localStorage`.
 
-Os atributos do país existem mas **ainda não evoluem**: população (Fase 10), economia
-(Fase 11) e o sistema de ticks (Fase 19) virão depois. O frontend também ainda não
-consome a API — a primeira tela de verdade é o Dashboard (Fase 9).
+Antes disso: fundação do repositório (Fase 1), monorepo (Fase 2), Prisma (Fase 3),
+backend NestJS (Fase 4), frontend Next.js (Fase 5), autenticação com JWT (Fase 6), perfil
+do jogador (Fase 7) e criação de países pela API (Fase 8).
+
+A seguir, na **Fase 9b**: tela de criação do país e o painel com seus atributos. Os
+atributos ainda **não evoluem** — população (Fase 10), economia (Fase 11) e ticks
+(Fase 19) virão depois.
 
 ## Requisitos
 
@@ -76,8 +79,14 @@ apps/
 │   ├── test/                     testes e2e (Supertest)
 │   └── prisma/schema.prisma      model User + migrations
 └── web/                        Next.js
-    └── src/app/                página inicial + layout (Tailwind CSS)
+    └── src/
+        ├── app/                 páginas: /, /login, /register
+        ├── components/          componentes de formulário
+        └── lib/                 cliente HTTP, schemas Zod, hooks de sessão
 ```
+
+Para rodar o jogo localmente é preciso subir os dois: `npm run dev:api` e
+`npm run dev:web` (em terminais separados).
 
 `packages/shared` e `packages/config` (sugeridos no CLAUDE.md) ainda não existem: só
 serão criados quando houver código real para compartilhar entre `api` e `web`.
