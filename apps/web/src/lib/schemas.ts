@@ -87,6 +87,32 @@ export const economySchema = z.object({
 
 export type Economy = z.infer<typeof economySchema>;
 
+/**
+ * Domínio Recursos.
+ *
+ * `label` vem do servidor, e não de um dicionário aqui: o nome do recurso é
+ * parte do catálogo, e duplicá-lo no cliente criaria dois lugares para manter
+ * sincronizados a cada recurso novo.
+ */
+export const depositSchema = z.object({
+  type: z.string(),
+  label: z.string(),
+  reserves: z.number(),
+  extractedTotal: z.number(),
+  annualExtraction: z.number(),
+  annualRevenue: z.number(),
+  yearsRemaining: z.number().nullable(),
+});
+
+export const resourcesSchema = z.object({
+  extractionRate: z.number(),
+  annualRevenue: z.number(),
+  deposits: z.array(depositSchema),
+});
+
+export type Deposit = z.infer<typeof depositSchema>;
+export type Resources = z.infer<typeof resourcesSchema>;
+
 export const nationSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -95,6 +121,7 @@ export const nationSchema = z.object({
   government: z.enum(GOVERNMENT_TYPES),
   population: populationSchema,
   economy: economySchema,
+  resources: resourcesSchema,
   territory: z.number(),
   happiness: z.number(),
   stability: z.number(),

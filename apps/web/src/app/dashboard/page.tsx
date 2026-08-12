@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { RequireSession } from '../../components/require-session';
+import { ResourcesPanel } from '../../components/resources-panel';
 import { HeroFigure, Meter, StatGroup, StatTile } from '../../components/stats';
 import { TaxRateControl } from '../../components/tax-rate-control';
 import { useLogout } from '../../lib/auth';
@@ -70,6 +71,8 @@ function NationDashboard({ nation }: { nation: Nation }) {
       </StatGroup>
 
       <TaxRateControl economy={nation.economy} />
+
+      <ResourcesPanel resources={nation.resources} />
 
       <StatGroup title="Desenvolvimento">
         <StatTile label="Tecnologia" value={formatCompact(nation.technology)} />

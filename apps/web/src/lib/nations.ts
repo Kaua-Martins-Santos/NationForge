@@ -66,3 +66,25 @@ export function useSetTaxRate() {
     },
   });
 }
+
+/**
+ * Altera a intensidade de extração de recursos.
+ *
+ * Como a alíquota, a resposta traz o país inteiro: a troca fecha o período de
+ * simulação e mexe em reservas, tesouro e emissões de uma vez.
+ */
+export function useSetExtractionRate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (extractionRate: number) =>
+      apiRequest('/nations/me/extraction-rate', {
+        method: 'PATCH',
+        body: { extractionRate },
+        schema: nationSchema,
+      }),
+    onSuccess: (nation) => {
+      queryClient.setQueryData(NATION_QUERY_KEY, nation);
+    },
+  });
+}
