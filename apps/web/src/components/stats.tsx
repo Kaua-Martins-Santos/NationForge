@@ -4,10 +4,12 @@ import { formatFull } from '../lib/format';
 /**
  * Componentes de exibição de números.
  *
- * Os atributos do país são valores pontuais únicos, sem histórico — nada evolui
- * até o sistema de ticks. Por isso não há gráficos aqui: um gráfico exigiria uma
- * série temporal que não existe, e desenhá-lo significaria inventar dados.
- * Também não há indicadores de variação ("+2,4%") pelo mesmo motivo.
+ * População e economia já evoluem no tempo, mas o jogo ainda não **guarda** o
+ * histórico: cada leitura entrega o estado atual, não a série que levou até ele.
+ * Por isso não há gráficos aqui — desenhar um exigiria inventar os pontos
+ * intermediários. Também não há indicadores de variação ("+2,4%") pelo mesmo
+ * motivo. Ambos passam a fazer sentido quando os relatórios (Fase 21) gravarem
+ * o que aconteceu em cada período.
  *
  * Rótulos e valores usam tinta de texto, nunca a cor do dado.
  */

@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { RequireSession } from '../../components/require-session';
 import { HeroFigure, Meter, StatGroup, StatTile } from '../../components/stats';
+import { TaxRateControl } from '../../components/tax-rate-control';
 import { useLogout } from '../../lib/auth';
-import { formatCompact } from '../../lib/format';
+import { formatCompact, formatDateTime, formatMoney } from '../../lib/format';
 import { useNation } from '../../lib/nations';
 import { GOVERNMENT_LABELS, type Nation } from '../../lib/schemas';
 
@@ -62,11 +63,13 @@ function NationDashboard({ nation }: { nation: Nation }) {
       </StatGroup>
 
       <StatGroup title="Economia e território">
-        <StatTile label="PIB" value={formatCompact(nation.gdp)} />
-        <StatTile label="Tesouro" value={formatCompact(nation.treasury)} />
+        <StatTile label="PIB" value={formatMoney(nation.economy.gdp)} unit="ao ano" />
+        <StatTile label="Tesouro" value={formatMoney(nation.economy.treasury)} />
         <StatTile label="Território" value={formatCompact(nation.territory)} unit="km²" />
         <StatTile label="Emissões" value={formatCompact(nation.emissions)} />
       </StatGroup>
+
+      <TaxRateControl economy={nation.economy} />
 
       <StatGroup title="Desenvolvimento">
         <StatTile label="Tecnologia" value={formatCompact(nation.technology)} />
@@ -75,8 +78,9 @@ function NationDashboard({ nation }: { nation: Nation }) {
       </StatGroup>
 
       <p className="text-sm text-ink-muted">
-        A população já evolui com o tempo, calculada por hora decorrida. Economia, produção e os
-        demais atributos ainda são estáticos.
+        População e economia evoluem por hora decorrida, mesmo com você offline. Simulado até{' '}
+        {formatDateTime(nation.simulatedUntil)}. Produção, recursos e os demais atributos ainda são
+        estáticos.
       </p>
     </main>
   );

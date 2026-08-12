@@ -66,10 +66,26 @@ export const populationSchema = z.object({
   deathRatePerThousand: z.number(),
   health: z.number(),
   education: z.number(),
-  simulatedUntil: z.string(),
 });
 
 export type Population = z.infer<typeof populationSchema>;
+
+/**
+ * Domínio Economia.
+ *
+ * Os valores anuais são projeções calculadas pelo servidor com as mesmas
+ * fórmulas que o tick usa — o cliente nunca recalcula regra de jogo, só exibe.
+ */
+export const economySchema = z.object({
+  treasury: z.number(),
+  taxRate: z.number(),
+  gdp: z.number(),
+  annualRevenue: z.number(),
+  annualExpenses: z.number(),
+  annualBalance: z.number(),
+});
+
+export type Economy = z.infer<typeof economySchema>;
 
 export const nationSchema = z.object({
   id: z.string(),
@@ -78,9 +94,8 @@ export const nationSchema = z.object({
   capital: z.string(),
   government: z.enum(GOVERNMENT_TYPES),
   population: populationSchema,
+  economy: economySchema,
   territory: z.number(),
-  gdp: z.number(),
-  treasury: z.number(),
   happiness: z.number(),
   stability: z.number(),
   technology: z.number(),
@@ -88,9 +103,22 @@ export const nationSchema = z.object({
   infrastructure: z.number(),
   emissions: z.number(),
   createdAt: z.string(),
+  /** Até quando a simulação está aplicada — o "as of" de todos os números. */
+  simulatedUntil: z.string(),
 });
 
 export type Nation = z.infer<typeof nationSchema>;
+
+/** A decisão econômica do jogador, com os mesmos limites que o backend valida. */
+export const taxRateFormSchema = z.object({
+  taxRate: z
+    .number()
+    .int('A alíquota precisa ser um número inteiro.')
+    .min(0, 'A alíquota mínima é 0%.')
+    .max(100, 'A alíquota máxima é 100%.'),
+});
+
+export type TaxRateFormValues = z.infer<typeof taxRateFormSchema>;
 
 export const createNationFormSchema = z.object({
   name: z

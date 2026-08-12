@@ -42,3 +42,27 @@ export function useCreateNation() {
     },
   });
 }
+
+/**
+ * Altera a alíquota de imposto.
+ *
+ * A resposta traz o país inteiro, não só a alíquota: mudar o imposto fecha o
+ * período de simulação e move receita, tesouro e felicidade. Guardamos essa
+ * resposta no cache em vez de invalidar a query — o estado novo já veio, e um
+ * refetch só adicionaria um piscar.
+ */
+export function useSetTaxRate() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (taxRate: number) =>
+      apiRequest('/nations/me/tax-rate', {
+        method: 'PATCH',
+        body: { taxRate },
+        schema: nationSchema,
+      }),
+    onSuccess: (nation) => {
+      queryClient.setQueryData(NATION_QUERY_KEY, nation);
+    },
+  });
+}

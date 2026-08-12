@@ -17,3 +17,35 @@ export function formatCompact(value: number): string {
 export function formatFull(value: number): string {
   return fullFormatter.format(value);
 }
+
+/**
+ * Valores monetários do jogo.
+ *
+ * A moeda é fictícia, então não usamos `style: 'currency'` — que forçaria um
+ * símbolo real (R$, US$) e sugeriria um país do mundo real. O prefixo neutro
+ * deixa claro que é dinheiro sem fingir de que moeda se trata.
+ *
+ * O sinal é sempre explícito quando o valor pode ser negativo (`signed`): um
+ * saldo de -2 mi e um de 2 mi não podem parecer o mesmo número.
+ */
+export function formatMoney(value: number, { signed = false } = {}): string {
+  const sign = signed && value > 0 ? '+' : '';
+
+  return `${sign}${compactFormatter.format(value)} ₦`;
+}
+
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+});
+
+/**
+ * Instante em que a simulação foi fechada.
+ *
+ * Existe para o jogador saber a que momento os números se referem — a simulação
+ * avança em ticks de 1 hora, então o painel mostra o estado do último tick
+ * inteiro, não o de "agora".
+ */
+export function formatDateTime(isoDate: string): string {
+  return dateTimeFormatter.format(new Date(isoDate));
+}
