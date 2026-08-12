@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Herdamos "module": "NodeNext" do tsconfig base. Como este pacote não declara
+    // "type": "module", o TypeScript emite CommonJS — que é o formato esperado
+    // pelo NestJS — sem precisar do "moduleResolution: node10", já deprecado no TS 6.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "outDir": "./dist",
+    "rootDir": "./",
+    "declaration": false,
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*", "test/**/*", "prisma.config.ts"],
+  "exclude": ["node_modules", "dist", "generated"]
+}

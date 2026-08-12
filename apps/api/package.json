@@ -2,16 +2,62 @@
   "name": "@nationforge/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Backend do NationForge. Acesso a dados via Prisma (Fase 3); aplicação NestJS chega na Fase 4.",
+  "description": "Backend do NationForge (NestJS). Esqueleto inicial da Fase 4; módulos de domínio chegam nas fases seguintes.",
   "dependencies": {
-    "@prisma/client": "^7.9.1"
+    "@nestjs/common": "^11.1.29",
+    "@nestjs/core": "^11.1.29",
+    "@nestjs/platform-express": "^11.1.29",
+    "@prisma/client": "^7.9.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/schematics": "^11.1.0",
+    "@nestjs/testing": "^11.1.29",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.2.0",
+    "@types/source-map-support": "^0.5.10",
+    "@types/supertest": "^7.2.1",
     "dotenv": "^17.4.2",
-    "prisma": "^7.9.1"
+    "jest": "^30.4.2",
+    "prisma": "^7.9.1",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.12",
+    "ts-node": "^10.9.2"
   },
   "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "start": "node dist/src/main.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": ".",
+    "testRegex": ".*\\.(spec|e2e-spec)\\.ts$",
+    "transform": {
+      "^.+\\.ts$": [
+        "ts-jest",
+        {
+          "tsconfig": "tsconfig.json"
+        }
+      ]
+    },
+    "collectCoverageFrom": [
+      "src/**/*.ts"
+    ],
+    "coverageDirectory": "./coverage",
+    "testEnvironment": "node"
   }
 }

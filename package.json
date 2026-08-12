@@ -2,7 +2,7 @@
   "name": "nationforge",
   "version": "0.1.0",
   "private": true,
-  "description": "Simulador multiplayer de países. Projeto em construção incremental (Fase 2: monorepo e estrutura).",
+  "description": "Simulador multiplayer de países. Projeto em construção incremental (Fase 4: backend inicial).",
   "engines": {
     "node": ">=24"
   },
@@ -15,6 +15,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
+    "dev:api": "npm run dev -w @nationforge/api",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "prisma:generate": "npm run prisma:generate -w @nationforge/api",
     "db:push": "npm run db:push -w @nationforge/api"
   },

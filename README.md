@@ -9,10 +9,10 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 3 — PostgreSQL + Prisma.** Já temos a fundação do repositório (Fase 1), o
-monorepo com npm workspaces (Fase 2) e agora o Prisma configurado em `apps/api`
-apontando para um Postgres local. O schema ainda não possui models, e não há NestJS,
-Next.js ou qualquer funcionalidade de jogo — isso vem nas próximas fases.
+**Fase 4 — Backend inicial.** Já temos a fundação do repositório (Fase 1), o monorepo
+com npm workspaces (Fase 2), o Prisma configurado (Fase 3) e agora uma aplicação NestJS
+que sobe e responde em `GET /health`. Ainda não há models no banco, frontend Next.js
+nem qualquer funcionalidade de jogo — isso vem nas próximas fases.
 
 ## Requisitos
 
@@ -37,6 +37,10 @@ Em seguida configure o acesso ao banco seguindo o
 | `npm run lint:fix`        | Executa o ESLint corrigindo problemas automaticamente |
 | `npm run format`          | Formata todos os arquivos com o Prettier              |
 | `npm run format:check`    | Verifica a formatação sem alterar arquivos            |
+| `npm run dev:api`         | Sobe o backend em modo watch                          |
+| `npm run build`           | Compila todos os workspaces                           |
+| `npm test`                | Roda os testes de todos os workspaces                 |
+| `npm run typecheck`       | Verifica os tipos de todos os workspaces              |
 | `npm run prisma:generate` | Gera o Prisma Client (`apps/api`)                     |
 | `npm run db:push`         | Sincroniza o schema Prisma com o banco (`apps/api`)   |
 
@@ -55,9 +59,14 @@ docs: update README
 
 ```text
 apps/
-├── api/    (Prisma configurado — NestJS chega na Fase 4)
-│   └── prisma/schema.prisma   (ainda sem models)
-└── web/    (placeholder — Next.js chega na Fase 5)
+├── api/                        NestJS
+│   ├── src/
+│   │   ├── main.ts             bootstrap
+│   │   ├── app.module.ts       módulo raiz
+│   │   └── health/             GET /health
+│   ├── test/                   testes e2e (Supertest)
+│   └── prisma/schema.prisma    ainda sem models
+└── web/                        placeholder — Next.js chega na Fase 5
 ```
 
 `packages/shared` e `packages/config` (sugeridos no CLAUDE.md) ainda não existem: só
