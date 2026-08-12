@@ -3,9 +3,11 @@
 Backend do NationForge (NestJS).
 
 Contém o esqueleto da aplicação (Fase 4), acesso a dados via Prisma (Fase 3),
-autenticação com JWT (Fase 6), o perfil do usuário (Fase 7) e a criação de países
-(Fase 8). Os atributos do país existem e são persistidos, mas **não evoluem ainda** —
-população (Fase 10), economia (Fase 11) e ticks (Fase 19) virão nas próximas fases.
+autenticação com JWT (Fase 6), o perfil do usuário (Fase 7), a criação de países (Fase 8)
+e o domínio População (Fase 10).
+
+A população **já evolui com o tempo**; os demais atributos do país continuam estáticos —
+economia (Fase 11) e o sistema de ticks generalizado (Fase 19) virão nas próximas fases.
 
 ## Executando
 
@@ -31,6 +33,28 @@ PATCH /users/me/password    🔒 { currentPassword, newPassword } →  204 (sem 
 
 POST  /nations              🔒 { name, flag, capital, government } →  201 país criado
 GET   /nations/me           🔒                                 →  país do jogador (404 se não tem)
+```
+
+`GET /nations/me` põe a simulação demográfica em dia antes de responder, e traz o domínio
+População aninhado:
+
+```json
+{
+  "name": "...",
+  "government": "MONARCHY",
+  "treasury": 5000000,
+  "population": {
+    "total": 1001156,
+    "employed": 580670,
+    "unemployed": 420486,
+    "unemploymentRate": 42,
+    "birthRatePerThousand": 18,
+    "deathRatePerThousand": 8,
+    "health": 50,
+    "education": 10,
+    "simulatedUntil": "..."
+  }
+}
 ```
 
 🔒 = exige autenticação, aceita **cookie de sessão** (usado pelo navegador) **ou**
@@ -80,8 +104,10 @@ Models atuais:
 
 - **`User`** (id, email, displayName, passwordHash, createdAt, updatedAt). `email` é
   credencial privada de login; `displayName` é o nome público do jogador. Ambos únicos.
-- **`Nation`** — o país. Relação 1:1 com `User` (`userId` único), com
-  `onDelete: Cascade`: apagar o usuário apaga o país.
+- **`Nation`** — o país: identidade e os atributos que ainda não têm domínio próprio.
+  Relação 1:1 com `User` (`userId` único), com `onDelete: Cascade`.
+- **`PopulationState`** — o domínio População, 1:1 com `Nation`. Dono único do número de
+  habitantes (`total`).
 
 > Nota: `prisma migrate dev` é interativo e falha em terminais não interativos quando há
 > avisos (ex.: adicionar uma constraint `UNIQUE`). Nesses casos, gere o SQL com
@@ -118,6 +144,41 @@ Models atuais:
   brecha.
 - Não implementados: exclusão de conta, avatar, listagem pública de jogadores, papéis
   e permissões.
+
+## Decisões da Fase 10 (população)
+
+- **Uma tabela por domínio.** `population_states` é 1:1 com `nations`, e cada domínio
+  futuro (economia, recursos, indústria) ganha a sua. Assim cada fato tem um único dono e
+  a tabela `nations` não vira um registro de 80 colunas. O número de habitantes **saiu de
+  `nations`** e passou a morar em `population_states.total`: manter os dois seria ter duas
+  fontes da verdade para o mesmo dado.
+- **A população evolui por tempo decorrido, não por processo em background**
+  (CLAUDE.md seção 26). `GET /nations/me` põe a simulação em dia antes de responder.
+- **O tick é a defesa contra exploits**, e tem três partes — a terceira só existe porque
+  um teste a cobrou (ver [`population-growth.ts`](./src/population/population-growth.ts)):
+  1. Só ticks **inteiros** de 1 hora são aplicados, e o marco avança em múltiplos exatos
+     da duração do tick, nunca para "agora". Recarregar não gera população.
+  2. Cada tick é aplicado **individualmente em laço**, para que 10 ticks de uma vez
+     equivalham a 1 tick dez vezes.
+  3. Toda a aritmética usa **milionésimos de habitante**, e o resto fracionário é
+     persistido em `growthCarryMicro`. A primeira versão arredondava para habitante
+     inteiro a cada cálculo e descartava a fração — quem recarregava de hora em hora
+     acumulava MENOS gente que quem esperava um dia. Há um teste garantindo a
+     equivalência exata dos dois caminhos.
+- **Regras puras e sem `Math.random()`.** Determinismo é requisito da seção 25: mesmas
+  entradas, mesma saída, sempre — o que torna as regras testáveis e auditáveis.
+- **Emprego é derivado, não armazenado.** Depende da demanda por trabalho, que pertence à
+  economia; um campo no banco ficaria desatualizado. Quando a economia existir, a função é
+  substituída por uma que olhe a demanda real.
+- **Catch-up limitado a 1 ano** de ausência, para limitar o custo do laço.
+- **Pool de conexões com teto explícito** ([`prisma.service.ts`](./src/prisma/prisma.service.ts)):
+  o padrão do driver é proporcional ao número de CPUs, e com 9 suítes de teste em paralelo
+  isso estourava o `max_connections` do Postgres — a suíte falhava se um servidor de dev
+  estivesse rodando. `DATABASE_POOL_MAX` ajusta o teto.
+- **`testTimeout` de 30s** (config do Jest no `package.json`): o `beforeAll` dos e2e compila
+  o `AppModule` inteiro e abre conexão com o banco, o que passa dos 5s padrão do Jest em
+  execução fria. O sintoma era uma suíte que falhava na primeira rodada e passava na
+  segunda — flakiness, não erro de lógica.
 
 ## Decisões da Fase 8 (países)
 

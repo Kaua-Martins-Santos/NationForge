@@ -23,15 +23,24 @@ export class NationsController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() dto: CreateNationDto,
   ): Promise<PublicNation> {
-    const nation = await this.nationsService.create(currentUser.userId, dto);
+    const { nation, population } = await this.nationsService.create(
+      currentUser.userId,
+      dto,
+      new Date(),
+    );
 
-    return toPublicNation(nation);
+    return toPublicNation(nation, population);
   }
 
   @Get('me')
   async getMyNation(@CurrentUser() currentUser: AuthenticatedUser): Promise<PublicNation> {
-    const nation = await this.nationsService.findByUserIdOrFail(currentUser.userId);
+    // A leitura põe a simulação em dia antes de responder: é o momento em que o
+    // tempo decorrido offline vira crescimento populacional.
+    const { nation, population } = await this.nationsService.findCurrentStateOrFail(
+      currentUser.userId,
+      new Date(),
+    );
 
-    return toPublicNation(nation);
+    return toPublicNation(nation, population);
   }
 }

@@ -47,9 +47,10 @@ enum GovernmentType {
 ///
 /// Relação 1:1 com User (userId é único): cada usuário possui no máximo um país.
 ///
-/// Nesta fase os atributos apenas existem e são persistidos — nada evolui ainda.
-/// Crescimento populacional (Fase 10), economia (Fase 11) e ticks (Fase 19) vão
-/// operar sobre estes campos.
+/// Guarda a identidade da nação e os atributos que ainda não têm domínio próprio.
+/// Cada domínio do jogo ganha sua própria tabela 1:1 conforme é implementado
+/// (PopulationState na Fase 10; economia, recursos e indústria depois), para que
+/// cada fato tenha um único dono e os módulos fiquem de fato separados.
 model Nation {
   id     String @id @default(uuid())
   userId String @unique
@@ -63,11 +64,7 @@ model Nation {
 
   // Definidos pelo servidor. O cliente nunca envia estes valores: permitir isso
   // seria deixar o jogador escolher o próprio tesouro (CLAUDE.md seção 33).
-  //
-  // População em BigInt: Int do Postgres estoura em ~2,1 bilhões, alcançável por
-  // uma nação grande em um jogo de crescimento longo.
-  population BigInt
-  territory  Int
+  territory Int
 
   // Decimal (e não float) para valores monetários: os ticks farão milhares de
   // operações sobre estes campos, e float acumula erro de arredondamento. A
@@ -87,5 +84,49 @@ model Nation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  populationState PopulationState?
+
   @@map("nations")
+}
+
+/// Estado demográfico de um país — o domínio População (CLAUDE.md seção 12).
+///
+/// Dono único do número de habitantes: `total` mora aqui, e não em Nation, para
+/// não existirem duas fontes da verdade para o mesmo fato.
+model PopulationState {
+  id       String @id @default(uuid())
+  nationId String @unique
+  nation   Nation @relation(fields: [nationId], references: [id], onDelete: Cascade)
+
+  /// BigInt: o INTEGER do Postgres estoura em ~2,1 bilhões, alcançável por uma
+  /// nação grande em um jogo de crescimento longo.
+  total BigInt
+
+  /// Resto fracionário do crescimento, em milionésimos de habitante (0 a 999999).
+  ///
+  /// Sem ele, cada cálculo arredondaria para habitante inteiro e jogaria a fração
+  /// fora — então um jogador que abre o jogo de hora em hora acumularia MENOS
+  /// população que um que espera um dia inteiro. Guardando o resto como inteiro
+  /// exato, a aritmética dá o mesmo resultado por qualquer caminho.
+  growthCarryMicro Int @default(0)
+
+  /// Taxas anuais por mil habitantes, como na demografia real.
+  birthRatePerThousand Int
+  deathRatePerThousand Int
+
+  /// Índices de 0 a 100. Nesta fase são fixos: serão movidos por gastos públicos
+  /// (economia) e por hospitais e escolas (infraestrutura), em fases próprias.
+  health    Int
+  education Int
+
+  /// Marco temporal da simulação: até quando o crescimento já foi aplicado.
+  ///
+  /// Avança em múltiplos exatos da duração do tick, nunca para "agora" — é o que
+  /// impede o jogador de ganhar população recarregando a página (seção 26).
+  simulatedUntil DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("population_states")
 }

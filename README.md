@@ -9,17 +9,20 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 9b — Dashboard.** O jogo é jogável de ponta a ponta pelo navegador: criar conta,
-entrar, fundar seu país e ver o painel com seus atributos. A sessão usa um cookie
-`httpOnly`, e não `localStorage`.
+**Fase 10 — População.** O primeiro número que **se move sozinho**: a população cresce com
+nascimentos, mortes e migração, calculada pelo tempo decorrido — o país evolui enquanto o
+jogador está offline, sem processo algum rodando em background.
+
+Antes: o jogo já é jogável de ponta a ponta pelo navegador (criar conta, entrar, fundar o
+país, ver o painel), com sessão em cookie `httpOnly`.
 
 Antes disso: fundação do repositório (Fase 1), monorepo (Fase 2), Prisma (Fase 3),
 backend NestJS (Fase 4), frontend Next.js (Fase 5), autenticação com JWT (Fase 6), perfil
 do jogador (Fase 7), criação de países pela API (Fase 8) e telas de autenticação
 (Fase 9a).
 
-Os atributos do país ainda **não evoluem**: população (Fase 10), economia (Fase 11) e o
-sistema de ticks (Fase 19) virão depois.
+Os demais atributos ainda **não evoluem**: economia (Fase 11) e o sistema de ticks
+generalizado (Fase 19) virão depois.
 
 ## Requisitos
 
@@ -75,6 +78,7 @@ apps/
 │   ├── src/auth/                registro, login, JWT
 │   ├── src/users/                perfil do jogador (/users/me)
 │   ├── src/nations/              criação e consulta do país
+│   ├── src/population/           demografia: crescimento, saúde, emprego
 │   ├── src/prisma/                PrismaService/PrismaModule
 │   ├── test/                     testes e2e (Supertest)
 │   └── prisma/schema.prisma      model User + migrations

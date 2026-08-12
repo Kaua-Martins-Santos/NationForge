@@ -9,8 +9,8 @@
  * afeta apenas países criados a partir de então.
  */
 export const NATION_DEFAULTS = {
-  /** 1 milhão de habitantes. */
-  population: 1_000_000n,
+  // A população inicial não está aqui: ela pertence ao domínio População
+  // (ver POPULATION_DEFAULTS), dono único desse dado.
 
   /** Em km². */
   territory: 100_000,

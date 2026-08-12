@@ -1,5 +1,6 @@
-import type { Nation } from '../../generated/prisma/client';
+import type { Nation, PopulationState } from '../../generated/prisma/client';
 import type { GovernmentType } from '../../generated/prisma/enums';
+import { toPublicPopulation, type PublicPopulation } from '../population/public-population';
 
 /**
  * Representação de um país pronta para sair em JSON.
@@ -10,6 +11,9 @@ import type { GovernmentType } from '../../generated/prisma/enums';
  * 2. Conversão de tipos que o JSON não representa nativamente. `JSON.stringify`
  *    lança TypeError em BigInt, e o Decimal do Prisma serializaria como objeto.
  *    A conversão acontece aqui, uma vez, em vez de espalhada pelos controllers.
+ *
+ * Cada domínio aninha seu próprio objeto (`population` agora; economia e recursos
+ * depois), espelhando na resposta a separação que existe no banco.
  */
 export interface PublicNation {
   id: string;
@@ -17,7 +21,6 @@ export interface PublicNation {
   flag: string;
   capital: string;
   government: GovernmentType;
-  population: number;
   territory: number;
   gdp: number;
   treasury: number;
@@ -28,20 +31,16 @@ export interface PublicNation {
   infrastructure: number;
   emissions: number;
   createdAt: Date;
+  population: PublicPopulation;
 }
 
-export function toPublicNation(nation: Nation): PublicNation {
+export function toPublicNation(nation: Nation, population: PopulationState): PublicNation {
   return {
     id: nation.id,
     name: nation.name,
     flag: nation.flag,
     capital: nation.capital,
     government: nation.government,
-
-    // Number é seguro aqui: o limite exato de um number é 2^53, muito acima de
-    // qualquer população plausível. O BigInt no banco existe para não estourar o
-    // limite de 2^31 do INTEGER do Postgres, não por precisão.
-    population: Number(nation.population),
     territory: nation.territory,
 
     // O Decimal preserva a precisão nas contas do servidor e no banco; na
@@ -57,5 +56,7 @@ export function toPublicNation(nation: Nation): PublicNation {
     infrastructure: nation.infrastructure,
     emissions: nation.emissions,
     createdAt: nation.createdAt,
+
+    population: toPublicPopulation(population),
   };
 }
