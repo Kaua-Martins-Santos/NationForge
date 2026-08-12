@@ -2,7 +2,7 @@
   "name": "nationforge",
   "version": "0.1.0",
   "private": true,
-  "description": "Simulador multiplayer de países. Projeto em construção incremental (Fase 4: backend inicial).",
+  "description": "Simulador multiplayer de países. Projeto em construção incremental (Fase 5: frontend inicial).",
   "engines": {
     "node": ">=24"
   },
@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "dev:api": "npm run dev -w @nationforge/api",
+    "dev:web": "npm run dev -w @nationforge/web",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
@@ -25,8 +26,8 @@
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.8.1",
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^9.1.7",
     "lint-staged": "^17.3.0",

@@ -2,5 +2,23 @@
   "name": "@nationforge/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Frontend do NationForge (Next.js). Ainda não implementado — placeholder da Fase 2, código chega na Fase 5."
+  "description": "Frontend do NationForge (Next.js). Esqueleto inicial da Fase 5; telas do jogo chegam nas fases seguintes.",
+  "dependencies": {
+    "next": "^16.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "eslint-config-next": "^16.3.0",
+    "tailwindcss": "^4.3.3"
+  }
 }

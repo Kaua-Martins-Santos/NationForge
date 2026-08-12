@@ -25,3 +25,12 @@ Thumbs.db
 
 # Husky (v9 not needed, but keeping local hook state out of VCS if generated)
 .husky/_/
+
+# Estado local do Claude Code (não faz parte do projeto)
+/.claude/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Next.js (regenerado automaticamente por next dev/build)
+next-env.d.ts

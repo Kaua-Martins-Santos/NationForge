@@ -9,10 +9,11 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 4 — Backend inicial.** Já temos a fundação do repositório (Fase 1), o monorepo
-com npm workspaces (Fase 2), o Prisma configurado (Fase 3) e agora uma aplicação NestJS
-que sobe e responde em `GET /health`. Ainda não há models no banco, frontend Next.js
-nem qualquer funcionalidade de jogo — isso vem nas próximas fases.
+**Fase 5 — Frontend inicial.** Já temos a fundação do repositório (Fase 1), o monorepo
+(Fase 2), o Prisma configurado (Fase 3), o backend NestJS respondendo em `GET /health`
+(Fase 4) e agora um frontend Next.js com uma página inicial. Ainda não há models no
+banco, o frontend ainda não chama a API, e nenhuma funcionalidade de jogo foi
+implementada — isso vem nas próximas fases.
 
 ## Requisitos
 
@@ -38,6 +39,7 @@ Em seguida configure o acesso ao banco seguindo o
 | `npm run format`          | Formata todos os arquivos com o Prettier              |
 | `npm run format:check`    | Verifica a formatação sem alterar arquivos            |
 | `npm run dev:api`         | Sobe o backend em modo watch                          |
+| `npm run dev:web`         | Sobe o frontend em modo watch                         |
 | `npm run build`           | Compila todos os workspaces                           |
 | `npm test`                | Roda os testes de todos os workspaces                 |
 | `npm run typecheck`       | Verifica os tipos de todos os workspaces              |
@@ -66,7 +68,8 @@ apps/
 │   │   └── health/             GET /health
 │   ├── test/                   testes e2e (Supertest)
 │   └── prisma/schema.prisma    ainda sem models
-└── web/                        placeholder — Next.js chega na Fase 5
+└── web/                        Next.js
+    └── src/app/                página inicial + layout (Tailwind CSS)
 ```
 
 `packages/shared` e `packages/config` (sugeridos no CLAUDE.md) ainda não existem: só
