@@ -3,8 +3,9 @@
 Backend do NationForge (NestJS).
 
 Contém o esqueleto da aplicação (Fase 4), acesso a dados via Prisma (Fase 3),
-autenticação por e-mail/senha com JWT (Fase 6) e o perfil do usuário (Fase 7). Nenhum
-outro módulo de domínio do jogo foi implementado ainda.
+autenticação com JWT (Fase 6), o perfil do usuário (Fase 7) e a criação de países
+(Fase 8). Os atributos do país existem e são persistidos, mas **não evoluem ainda** —
+população (Fase 10), economia (Fase 11) e ticks (Fase 19) virão nas próximas fases.
 
 ## Executando
 
@@ -26,6 +27,9 @@ GET   /auth/me              🔒                                 →  { userId, 
 GET   /users/me             🔒                                 →  { id, email, displayName, createdAt }
 PATCH /users/me             🔒 { displayName }                 →  perfil atualizado
 PATCH /users/me/password    🔒 { currentPassword, newPassword } →  204 (sem corpo)
+
+POST  /nations              🔒 { name, flag, capital, government } →  201 país criado
+GET   /nations/me           🔒                                 →  país do jogador (404 se não tem)
 ```
 
 🔒 = exige `Authorization: Bearer <token>`.
@@ -70,9 +74,12 @@ A partir da Fase 6, mudanças de schema usam **migrations versionadas**
 (`prisma migrate dev`), não mais `db push`: o schema agora tem histórico real, e cada
 alteração precisa ficar registrada em [`prisma/migrations/`](./prisma/migrations/).
 
-Model atual: `User` (id, email, displayName, passwordHash, createdAt, updatedAt).
-`email` é credencial privada de login; `displayName` é o nome público do jogador. Ambos
-são únicos.
+Models atuais:
+
+- **`User`** (id, email, displayName, passwordHash, createdAt, updatedAt). `email` é
+  credencial privada de login; `displayName` é o nome público do jogador. Ambos únicos.
+- **`Nation`** — o país. Relação 1:1 com `User` (`userId` único), com
+  `onDelete: Cascade`: apagar o usuário apaga o país.
 
 > Nota: `prisma migrate dev` é interativo e falha em terminais não interativos quando há
 > avisos (ex.: adicionar uma constraint `UNIQUE`). Nesses casos, gere o SQL com
@@ -109,6 +116,31 @@ são únicos.
   brecha.
 - Não implementados: exclusão de conta, avatar, listagem pública de jogadores, papéis
   e permissões.
+
+## Decisões da Fase 8 (países)
+
+- **O jogador escolhe apenas 4 campos**: nome, bandeira, capital e governo. População,
+  território, PIB, tesouro e índices vêm de
+  [`nation-defaults.ts`](./src/nations/nation-defaults.ts), no servidor. Deixar o cliente
+  enviá-los permitiria escolher o próprio tesouro inicial (CLAUDE.md seção 33). O
+  `ValidationPipe` global com `forbidNonWhitelisted` faz a tentativa retornar 400, e o
+  service também ignora o dto para esses campos — há testes cobrindo os dois níveis.
+- **Um país por usuário** (`userId` único). Segundo país → 409.
+- **Nome de país único** entre todos os jogadores. Nome repetido → 409.
+- **Dinheiro em `Decimal(18,2)`, não em float.** Os ticks (Fase 19) farão milhares de
+  operações sobre PIB e tesouro; float acumula erro de arredondamento e a seção 25 pede
+  determinismo. Escolher agora evita migrar com economia já rodando.
+- **População em `BigInt`.** `INTEGER` do Postgres estoura em ~2,1 bilhões, alcançável
+  por uma nação grande num jogo de crescimento longo.
+- **`toPublicNation()` converte `BigInt` e `Decimal` para `number`.** `JSON.stringify`
+  lança `TypeError` em BigInt, e o `Decimal` sairia como objeto. A conversão fica em um
+  lugar só, com teste verificando que a resposta traz números.
+- **Governo é enum no banco** (`GovernmentType`), conforme a seção 20 — texto livre
+  permitiria valores inválidos persistidos.
+- **Bandeira é uma string curta (emoji), não upload de imagem** — upload exigiria
+  storage, validação de arquivo e CDN, nada disso necessário para o país existir.
+- **Não existe rota para ver o país de outro jogador.** Visualização pública chega com
+  diplomacia (Fase 22) e rankings (Fase 27), que definirão o que é legítimo expor.
 
 ### Armadilhas do Prisma 7 que apareceram aqui (documentado para não repetir)
 

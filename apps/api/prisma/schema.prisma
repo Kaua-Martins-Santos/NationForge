@@ -1,8 +1,8 @@
 // Prisma schema do NationForge.
 // Documentação: https://pris.ly/d/prisma-schema
 //
-// Os demais domínios do jogo (nações, população, economia...) serão criados nas
-// fases seguintes, cada um na sua etapa.
+// Os demais domínios do jogo (população, economia, indústria...) serão criados
+// nas fases seguintes, cada um na sua etapa.
 
 generator client {
   provider     = "prisma-client"
@@ -29,5 +29,63 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  nation Nation?
+
   @@map("users")
+}
+
+/// Formas de governo disponíveis (CLAUDE.md seção 20).
+/// Enum em vez de texto livre: impede valores inválidos chegarem ao banco.
+enum GovernmentType {
+  DEMOCRACY
+  MONARCHY
+  DICTATORSHIP
+  REPUBLIC
+}
+
+/// O país de um jogador.
+///
+/// Relação 1:1 com User (userId é único): cada usuário possui no máximo um país.
+///
+/// Nesta fase os atributos apenas existem e são persistidos — nada evolui ainda.
+/// Crescimento populacional (Fase 10), economia (Fase 11) e ticks (Fase 19) vão
+/// operar sobre estes campos.
+model Nation {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Definidos pelo jogador na criação.
+  name       String         @unique
+  flag       String
+  capital    String
+  government GovernmentType
+
+  // Definidos pelo servidor. O cliente nunca envia estes valores: permitir isso
+  // seria deixar o jogador escolher o próprio tesouro (CLAUDE.md seção 33).
+  //
+  // População em BigInt: Int do Postgres estoura em ~2,1 bilhões, alcançável por
+  // uma nação grande em um jogo de crescimento longo.
+  population BigInt
+  territory  Int
+
+  // Decimal (e não float) para valores monetários: os ticks farão milhares de
+  // operações sobre estes campos, e float acumula erro de arredondamento. A
+  // seção 25 do CLAUDE.md pede determinismo.
+  gdp      Decimal @db.Decimal(18, 2)
+  treasury Decimal @db.Decimal(18, 2)
+
+  // Índices de 0 a 100.
+  happiness Int
+  stability Int
+
+  technology     Int
+  militaryPower  Int
+  infrastructure Int
+  emissions      Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("nations")
 }
