@@ -9,20 +9,27 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 10 — População.** O primeiro número que **se move sozinho**: a população cresce com
-nascimentos, mortes e migração, calculada pelo tempo decorrido — o país evolui enquanto o
-jogador está offline, sem processo algum rodando em background.
+**Fase 11 — Economia.** O jogo ganhou a primeira **decisão com consequência**: o jogador
+define a alíquota de imposto, que move receita, tesouro e felicidade — e, como felicidade
+move a migração, a escolha econômica volta como consequência demográfica.
 
-Antes: o jogo já é jogável de ponta a ponta pelo navegador (criar conta, entrar, fundar o
-país, ver o painel), com sessão em cookie `httpOnly`.
+Para isso, população e economia passaram a avançar em um **único laço de ticks**. Com laços
+separados, esperar offline renderia mais dinheiro que jogar; o laço conjunto fecha essa
+brecha. É um pedaço da Fase 19 antecipado por necessidade técnica.
+
+Antes: **Fase 10 — População**, o primeiro número que se move sozinho — nascimentos, mortes
+e migração calculados pelo tempo decorrido, sem processo algum rodando em background. E o
+jogo já era jogável de ponta a ponta pelo navegador (criar conta, entrar, fundar o país, ver
+o painel), com sessão em cookie `httpOnly`.
 
 Antes disso: fundação do repositório (Fase 1), monorepo (Fase 2), Prisma (Fase 3),
 backend NestJS (Fase 4), frontend Next.js (Fase 5), autenticação com JWT (Fase 6), perfil
 do jogador (Fase 7), criação de países pela API (Fase 8) e telas de autenticação
 (Fase 9a).
 
-Os demais atributos ainda **não evoluem**: economia (Fase 11) e o sistema de ticks
-generalizado (Fase 19) virão depois.
+Os demais atributos ainda **não evoluem**: recursos (Fase 12), produção (Fase 13) e o
+restante do roadmap virão depois. A camada visual é provisória — um redesign completo está
+planejado.
 
 ## Requisitos
 

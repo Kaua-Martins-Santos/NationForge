@@ -33,16 +33,16 @@ PATCH /users/me/password    🔒 { currentPassword, newPassword } →  204 (sem 
 
 POST  /nations              🔒 { name, flag, capital, government } →  201 país criado
 GET   /nations/me           🔒                                 →  país do jogador (404 se não tem)
+PATCH /nations/me/tax-rate  🔒 { taxRate }                     →  país com a alíquota nova
 ```
 
-`GET /nations/me` põe a simulação demográfica em dia antes de responder, e traz o domínio
-População aninhado:
+`GET /nations/me` põe a simulação em dia antes de responder, e traz cada domínio aninhado:
 
 ```json
 {
   "name": "...",
   "government": "MONARCHY",
-  "treasury": 5000000,
+  "happiness": 59,
   "population": {
     "total": 1001156,
     "employed": 580670,
@@ -51,11 +51,25 @@ População aninhado:
     "birthRatePerThousand": 18,
     "deathRatePerThousand": 8,
     "health": 50,
-    "education": 10,
-    "simulatedUntil": "..."
-  }
+    "education": 10
+  },
+  "economy": {
+    "treasury": 200000000,
+    "taxRate": 20,
+    "gdp": 13340000000,
+    "annualRevenue": 2668000000,
+    "annualExpenses": 1200000000,
+    "annualBalance": 1468000000
+  },
+  "simulatedUntil": "..."
 }
 ```
+
+`simulatedUntil` é o "as of" de todos os números: a simulação avança em ticks de 1 hora,
+então a resposta reflete o último tick **inteiro**, não o instante da requisição.
+
+`PATCH /nations/me/tax-rate` põe a simulação em dia **antes** de gravar a alíquota nova,
+fechando o período na alíquota que de fato valeu nele.
 
 🔒 = exige autenticação, aceita **cookie de sessão** (usado pelo navegador) **ou**
 `Authorization: Bearer <token>` (útil para curl, Postman e testes).
@@ -179,6 +193,65 @@ Models atuais:
   o `AppModule` inteiro e abre conexão com o banco, o que passa dos 5s padrão do Jest em
   execução fria. O sintoma era uma suíte que falhava na primeira rodada e passava na
   segunda — flakiness, não erro de lógica.
+
+> Parte do que está acima mudou na Fase 11: o laço de ticks saiu da população e virou um
+> orquestrador compartilhado, e o marco temporal saiu de `population_states` para `nations`.
+> As três defesas contra exploit continuam valendo, agora no orquestrador.
+
+## Decisões da Fase 11 (economia)
+
+- **Um laço de ticks só, para todos os domínios**
+  ([`simulation/simulate.ts`](./src/simulation/simulate.ts)). Enquanto só a população
+  evoluía, ela podia contar os próprios ticks. Com a economia isso quebra: o PIB depende da
+  força de trabalho, então a economia precisa da população **de cada tick**.
+
+  Com laços separados, um jogador ausente por 100 horas teria os 100 ticks econômicos
+  calculados sobre a população final (a maior), enquanto quem recarrega de hora em hora
+  teria cada tick sobre a população daquela hora — **esperar renderia mais dinheiro que
+  jogar**, o mesmo exploit que a Fase 10 eliminou na demografia. Inverter a ordem só inverte
+  quem se beneficia. Há um teste comparando as duas trajetórias.
+
+  Isso antecipa parte da Fase 19, como a seção 39 do CLAUDE.md permite quando dependências
+  técnicas exigem. Só o laço foi antecipado: eventos, produção e relatórios seguem nas suas
+  fases.
+
+- **Ordem fixa dentro de um tick**: população (com a felicidade do início do tick) →
+  economia (com a população já atualizada) → felicidade (valendo para o tick seguinte). A
+  ordem é parte da regra, porque mudá-la muda os números. O que ela garante é que nenhum
+  domínio enxergue um estado "do meio" de outro.
+
+- **`simulatedUntil` mora em `nations`**, não em um domínio: o tempo é do país inteiro, e um
+  marco por domínio permitiria que saíssem de sincronia.
+
+- **O PIB não é armazenado.** É derivado de trabalhadores × produtividade a cada leitura,
+  onde a produtividade vem de tecnologia, infraestrutura e educação. Persistir seria criar
+  uma segunda fonte da verdade para um número que já é consequência de outros domínios, e
+  que ficaria defasado a cada mudança neles. Mesmo raciocínio do emprego na Fase 10.
+
+- **Dinheiro em `BigInt` de centavos**, não `Decimal`: os ticks fazem milhares de somas, e
+  aritmética inteira é exata por construção em vez de depender de arredondamento correto a
+  cada passo. O resto do tick fica em `treasuryCarryMicro` (milionésimos de centavo), mesma
+  técnica do `growthCarryMicro`.
+
+- **`happinessCarryMicro` existe ou a mecânica de impostos não funcionaria.** A carga
+  tributária move a felicidade em ~0,003 ponto por tick, que arredondaria para zero todas as
+  vezes — o imposto nunca chegaria a incomodar ninguém. Ao bater no teto ou no piso do
+  índice o resto é descartado, senão um país cronicamente infeliz acumularia uma dívida
+  invisível e demoraria a reagir depois que o jogador corrigisse a alíquota.
+
+- **`setTaxRate` simula antes de gravar.** Sem isso, o jogador poderia passar um mês com
+  imposto zero (felicidade subindo), pôr 100% um instante antes da próxima leitura e
+  arrecadar o mês inteiro na alíquota nova. Há um teste e2e cobrindo esse caminho.
+
+- **O tesouro pode ficar negativo.** Um país que gasta mais do que arrecada entra no
+  vermelho. Dívida pública formal (juros, limite, calote) é uma fatia posterior.
+
+- **Folga fiscal proposital.** Na alíquota neutra o país acumula superávit largo, porque
+  ainda não existe no que gastar. Construções (Fase 17), exército (Fase 24) e pesquisa
+  (Fase 18) é que vão consumir esse saldo e transformar a alíquota numa escolha difícil —
+  rebalancear antes deles seria chutar.
+
+- **Fora do escopo desta fatia**: inflação, dívida pública formal, consumo e comércio.
 
 ## Decisões da Fase 8 (países)
 
