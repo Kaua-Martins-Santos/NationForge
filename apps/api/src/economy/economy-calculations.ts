@@ -38,7 +38,14 @@ const PRODUCTIVITY_WEIGHTS = {
   education: 0.3,
 } as const;
 
-/** Custo anual dos serviços públicos por habitante, em centavos. */
+/**
+ * Custo anual dos serviços públicos por habitante, em centavos.
+ *
+ * Na alíquota neutra isso deixa o país com folga fiscal larga — de propósito,
+ * por ora: ainda não existe no que gastar. Construções (Fase 17), exército
+ * (Fase 24) e pesquisa (Fase 18) é que vão consumir o superávit e transformar
+ * a alíquota numa escolha difícil. Rebalancear antes deles seria chutar.
+ */
 const PUBLIC_SPENDING_PER_CAPITA_CENTS = 1_200 * CENTS_PER_UNIT;
 
 /** Receita anual de impostos, em centavos. */
