@@ -18,8 +18,11 @@
  * ## Ordem dentro de um tick
  *
  * 1. **População**, usando a felicidade do início do tick.
- * 2. **Economia**, usando a população já atualizada.
- * 3. **Felicidade**, movida pela carga tributária, valendo para o tick seguinte.
+ * 2. **Extração**, que consome reservas e gera receita.
+ * 3. **Economia**, usando a população já atualizada e a receita da extração —
+ *    que entra no tesouro no mesmo tick em que saiu do solo.
+ * 4. **Felicidade**, movida pela carga tributária, valendo para o tick seguinte.
+ * 5. **Emissões**, acumuladas pelo que foi extraído.
  *
  * A ordem é fixa e documentada porque ela é parte da regra: mudá-la muda os
  * números. O que ela garante é que nenhum domínio enxergue um estado "do meio"
@@ -37,6 +40,11 @@ import {
   type PopulationSnapshot,
   type PopulationTickDelta,
 } from '../population/population-growth';
+import {
+  applyDepositTick,
+  type DepositSnapshot,
+  type ExtractionContext,
+} from '../resources/resource-extraction';
 import { countElapsedTicks, MICRO, settleCarry, TICK_DURATION_MS } from './tick';
 
 const HAPPINESS_MIN = 0;
@@ -46,6 +54,12 @@ const HAPPINESS_MAX = 100;
 export interface SimulationState {
   population: PopulationSnapshot;
   economy: EconomySnapshot;
+
+  /** Depósitos do país. Vazio é válido: um país pode não ter recurso algum. */
+  deposits: DepositSnapshot[];
+
+  /** Intensidade de extração escolhida pelo jogador, 0 a 100. */
+  extractionRate: number;
 
   /** Índice de 0 a 100, movido pela economia e lido pela migração. */
   happiness: number;
@@ -58,6 +72,10 @@ export interface SimulationState {
    * vezes — o imposto nunca chegaria a incomodar ninguém.
    */
   happinessCarryMicro: number;
+
+  /** Emissões acumuladas, e o resto fracionário pelo mesmo motivo. */
+  emissions: number;
+  emissionsCarryMicro: number;
 }
 
 /** Atributos da nação que a simulação lê, mas ainda não move. */
@@ -74,6 +92,10 @@ export interface SimulationTotals {
   revenueCents: number;
   expensesCents: number;
   happinessDelta: number;
+  /** Receita líquida da extração, já sem o custo de operação. */
+  resourceRevenueCents: number;
+  extracted: number;
+  emissions: number;
 }
 
 export interface SimulationResult {
@@ -92,6 +114,9 @@ function emptyTotals(): SimulationTotals {
     revenueCents: 0,
     expensesCents: 0,
     happinessDelta: 0,
+    resourceRevenueCents: 0,
+    extracted: 0,
+    emissions: 0,
   };
 }
 
@@ -99,6 +124,7 @@ function accumulate(
   totals: SimulationTotals,
   population: PopulationTickDelta,
   economy: EconomyTickDelta,
+  extraction: ExtractionTickResult,
 ): void {
   totals.births += population.births;
   totals.deaths += population.deaths;
@@ -106,6 +132,57 @@ function accumulate(
   totals.revenueCents += economy.revenueCents;
   totals.expensesCents += economy.expensesCents;
   totals.happinessDelta += economy.happinessDelta;
+  totals.resourceRevenueCents += extraction.netRevenueCents;
+  totals.extracted += extraction.extracted;
+  totals.emissions += extraction.emissions;
+}
+
+interface ExtractionTickResult {
+  deposits: DepositSnapshot[];
+  /** Receita já líquida do custo de operação. */
+  netRevenueCents: number;
+  extracted: number;
+  emissions: number;
+}
+
+/** Roda um tick de extração em todos os depósitos do país. */
+function extractionTick(
+  deposits: DepositSnapshot[],
+  context: ExtractionContext,
+): ExtractionTickResult {
+  const next: DepositSnapshot[] = [];
+  let netRevenueCents = 0;
+  let extracted = 0;
+  let emissions = 0;
+
+  for (const deposit of deposits) {
+    const result = applyDepositTick(deposit, context);
+
+    next.push(result.deposit);
+    netRevenueCents += result.delta.revenueCents - result.delta.operatingCostCents;
+    extracted += result.delta.extracted;
+    emissions += result.delta.emissions;
+  }
+
+  return { deposits: next, netRevenueCents, extracted, emissions };
+}
+
+/**
+ * Acumula emissões, que só crescem.
+ *
+ * Sem teto: um índice de 0 a 100 diria que existe um "máximo de poluição", o que
+ * não faz sentido para um total histórico. O que vai limitar não é um clamp e
+ * sim a consequência — quando o meio ambiente tiver fase própria, emissões altas
+ * passam a cobrar seu preço em saúde e felicidade.
+ */
+function applyEmissions(
+  emissions: number,
+  carryMicro: number,
+  deltaPerTick: number,
+): { emissions: number; carryMicro: number } {
+  const { whole, remainderMicro } = settleCarry(carryMicro + Math.round(deltaPerTick * MICRO));
+
+  return { emissions: emissions + whole, carryMicro: remainderMicro };
 }
 
 /**
@@ -159,12 +236,20 @@ export function simulateNation(
   for (let tick = 0; tick < appliedTicks; tick += 1) {
     const population = applyPopulationTick(current.population, { happiness: current.happiness });
 
+    const extraction = extractionTick(current.deposits, {
+      extractionRate: current.extractionRate,
+      technology: constants.technology,
+      infrastructure: constants.infrastructure,
+    });
+
     const economy = applyEconomyTick(current.economy, {
       employed: employedFrom(population.snapshot.total, population.snapshot.education),
       population: population.snapshot.total,
       technology: constants.technology,
       infrastructure: constants.infrastructure,
       education: population.snapshot.education,
+      // A extração deste tick entra no tesouro deste tick, não do próximo.
+      externalRevenueCents: extraction.netRevenueCents,
     });
 
     const happiness = applyHappiness(
@@ -173,14 +258,24 @@ export function simulateNation(
       economy.delta.happinessDelta,
     );
 
+    const emissions = applyEmissions(
+      current.emissions,
+      current.emissionsCarryMicro,
+      extraction.emissions,
+    );
+
     current = {
       population: population.snapshot,
       economy: economy.snapshot,
+      deposits: extraction.deposits,
+      extractionRate: current.extractionRate,
       happiness: happiness.happiness,
       happinessCarryMicro: happiness.carryMicro,
+      emissions: emissions.emissions,
+      emissionsCarryMicro: emissions.carryMicro,
     };
 
-    accumulate(totals, population.delta, economy.delta);
+    accumulate(totals, population.delta, economy.delta, extraction);
   }
 
   return {

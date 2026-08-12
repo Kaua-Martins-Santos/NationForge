@@ -3,6 +3,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/jwt.strategy';
 import { SetTaxRateDto } from '../economy/dto/set-tax-rate.dto';
+import { SetExtractionRateDto } from '../resources/dto/set-extraction-rate.dto';
 import { CreateNationDto } from './dto/create-nation.dto';
 import { NationsService } from './nations.service';
 import { toPublicNation, type PublicNation } from './public-nation';
@@ -50,6 +51,24 @@ export class NationsController {
   ): Promise<PublicNation> {
     return toPublicNation(
       await this.nationsService.setTaxRate(currentUser.userId, dto.taxRate, new Date()),
+    );
+  }
+
+  /**
+   * A decisão do jogador sobre os recursos (CLAUDE.md seção 14): extrair rápido
+   * rende agora e esgota depois.
+   */
+  @Patch('me/extraction-rate')
+  async setExtractionRate(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: SetExtractionRateDto,
+  ): Promise<PublicNation> {
+    return toPublicNation(
+      await this.nationsService.setExtractionRate(
+        currentUser.userId,
+        dto.extractionRate,
+        new Date(),
+      ),
     );
   }
 }

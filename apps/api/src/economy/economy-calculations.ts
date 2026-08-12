@@ -95,6 +95,16 @@ export interface EconomyContext {
   technology: number;
   infrastructure: number;
   education: number;
+
+  /**
+   * Receita de outros domínios que entra no tesouro neste tick, em centavos.
+   *
+   * Hoje é a extração de recursos. Ela chega por aqui, e não é somada ao tesouro
+   * por fora, porque o tesouro tem um dono só: se cada domínio somasse direto,
+   * cada um precisaria da sua própria aritmética de resto acumulado e o total
+   * deixaria de fechar.
+   */
+  externalRevenueCents?: number;
 }
 
 /** O que aconteceu com o dinheiro em um tick, em centavos. */
@@ -173,7 +183,8 @@ export function applyEconomyTick(
   snapshot: EconomySnapshot,
   context: EconomyContext,
 ): { snapshot: EconomySnapshot; delta: EconomyTickDelta } {
-  const revenueCents = annualRevenueCents(snapshot.taxRate, context) / TICKS_PER_YEAR;
+  const taxRevenueCents = annualRevenueCents(snapshot.taxRate, context) / TICKS_PER_YEAR;
+  const revenueCents = taxRevenueCents + (context.externalRevenueCents ?? 0);
   const expensesCents = annualExpensesCents(context) / TICKS_PER_YEAR;
 
   const balanceMicro = Math.round((revenueCents - expensesCents) * MICRO);

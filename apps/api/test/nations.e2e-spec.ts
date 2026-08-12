@@ -300,7 +300,138 @@ describe('Nations (e2e)', () => {
       expect(new Date(body.simulatedUntil).getTime()).toBeLessThanOrEqual(Date.now());
     });
   });
+
+  describe('recursos', () => {
+    const resourcesOf = (body: unknown) => (body as { resources: PublicResourcesBody }).resources;
+
+    it('o país nasce com uma dotação natural', async () => {
+      const resources = resourcesOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      expect(resources.deposits.length).toBeGreaterThanOrEqual(3);
+
+      for (const deposit of resources.deposits) {
+        expect(deposit.reserves).toBeGreaterThan(0);
+        expect(deposit.label).toBeTruthy();
+      }
+    });
+
+    it('não expõe o resto interno nem a semente da dotação', async () => {
+      const body = (await authenticated('get', '/nations/me').expect(200)).body as {
+        resources: Record<string, unknown> & { deposits: Record<string, unknown>[] };
+      };
+
+      expect(body.resources).not.toHaveProperty('seed');
+
+      for (const deposit of body.resources.deposits) {
+        expect(deposit).not.toHaveProperty('extractionCarryMicro');
+      }
+    });
+
+    it('rejeita intensidade fora de 0–100', async () => {
+      await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: 101 })
+        .expect(400);
+      await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: -1 })
+        .expect(400);
+    });
+
+    it('rejeita campos que o jogador não escolhe', async () => {
+      await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: 50, seed: 1 })
+        .expect(400);
+    });
+
+    it('persiste a intensidade e recalcula as projeções', async () => {
+      const antes = resourcesOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      const resposta = await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: 100 })
+        .expect(200);
+
+      const depois = resourcesOf(resposta.body);
+
+      expect(depois.extractionRate).toBe(100);
+      expect(depois.annualRevenue).toBeGreaterThan(antes.annualRevenue);
+
+      // E continua valendo na próxima leitura.
+      expect(
+        resourcesOf((await authenticated('get', '/nations/me').expect(200)).body).extractionRate,
+      ).toBe(100);
+    });
+
+    it('a extração consome reservas ao longo do tempo offline', async () => {
+      const antes = resourcesOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      await rewindSimulation(90 * 24);
+
+      const depois = resourcesOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      const primeiroAntes = antes.deposits[0]!;
+      const primeiroDepois = depois.deposits.find((d) => d.type === primeiroAntes.type)!;
+
+      expect(primeiroDepois.reserves).toBeLessThan(primeiroAntes.reserves);
+      expect(primeiroDepois.extractedTotal).toBeGreaterThan(primeiroAntes.extractedTotal);
+    });
+
+    it('intensidade zero congela as reservas', async () => {
+      await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: 0 })
+        .expect(200);
+
+      const antes = resourcesOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      await rewindSimulation(90 * 24);
+
+      const depois = resourcesOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      for (const deposit of antes.deposits) {
+        const atual = depois.deposits.find((d) => d.type === deposit.type)!;
+
+        expect(atual.reserves).toBe(deposit.reserves);
+      }
+    });
+
+    /** O mesmo exploit que o `setTaxRate` fecha, agora na extração. */
+    it('fecha o período na intensidade que valeu nele, não na nova', async () => {
+      await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: 0 })
+        .expect(200);
+
+      const antes = resourcesOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      await rewindSimulation(90 * 24);
+
+      const resposta = await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: 100 })
+        .expect(200);
+
+      const depois = resourcesOf(resposta.body);
+
+      expect(depois.extractionRate).toBe(100);
+
+      // O período rodou com extração zero: nada saiu do solo.
+      for (const deposit of antes.deposits) {
+        const atual = depois.deposits.find((d) => d.type === deposit.type)!;
+
+        expect(atual.reserves).toBe(deposit.reserves);
+      }
+    });
+  });
 });
+
+interface PublicResourcesBody {
+  extractionRate: number;
+  annualRevenue: number;
+  deposits: {
+    type: string;
+    label: string;
+    reserves: number;
+    extractedTotal: number;
+    annualRevenue: number;
+    yearsRemaining: number | null;
+  }[];
+}
 
 interface PublicPopulationBody {
   total: number;

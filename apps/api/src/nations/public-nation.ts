@@ -2,6 +2,7 @@ import type { GovernmentType } from '../../generated/prisma/enums';
 import { toPublicEconomy, type PublicEconomy } from '../economy/public-economy';
 import { employedFrom } from '../population/population-growth';
 import { toPublicPopulation, type PublicPopulation } from '../population/public-population';
+import { toPublicResources, type PublicResources } from '../resources/public-resources';
 import type { SimulatedNation } from '../simulation/simulation.service';
 
 /**
@@ -34,11 +35,17 @@ export interface PublicNation {
   createdAt: Date;
   population: PublicPopulation;
   economy: PublicEconomy;
+  resources: PublicResources;
   /** Até quando a simulação está aplicada — o "as of" de todos os números acima. */
   simulatedUntil: string;
 }
 
-export function toPublicNation({ nation, population, economy }: SimulatedNation): PublicNation {
+export function toPublicNation({
+  nation,
+  population,
+  economy,
+  resources,
+}: SimulatedNation): PublicNation {
   return {
     id: nation.id,
     name: nation.name,
@@ -64,6 +71,11 @@ export function toPublicNation({ nation, population, economy }: SimulatedNation)
       technology: nation.technology,
       infrastructure: nation.infrastructure,
       education: population.education,
+    }),
+
+    resources: toPublicResources(resources, {
+      technology: nation.technology,
+      infrastructure: nation.infrastructure,
     }),
 
     simulatedUntil: nation.simulatedUntil.toISOString(),

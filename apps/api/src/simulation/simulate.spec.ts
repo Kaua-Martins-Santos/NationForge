@@ -16,8 +16,26 @@ const BASE_STATE: SimulationState = {
     treasuryCarryMicro: 0,
     taxRate: NEUTRAL_TAX_RATE,
   },
+  deposits: [
+    {
+      type: 'IRON',
+      reserves: 50_000_000n,
+      extractedTotal: 0n,
+      extractionCarryMicro: 0,
+    },
+    {
+      // Carvão pesa nas emissões — é o que torna visível o custo ambiental.
+      type: 'COAL',
+      reserves: 80_000_000n,
+      extractedTotal: 0n,
+      extractionCarryMicro: 0,
+    },
+  ],
+  extractionRate: 40,
   happiness: 60,
   happinessCarryMicro: 0,
+  emissions: 0,
+  emissionsCarryMicro: 0,
 };
 
 const CONSTANTS: SimulationConstants = { technology: 10, infrastructure: 10 };
@@ -224,6 +242,122 @@ describe('simulateNation', () => {
 
       expect(result.state.happiness).toBe(0);
       expect(result.state.happinessCarryMicro).toBe(0);
+    });
+  });
+
+  describe('recursos', () => {
+    const semExtracao = { ...BASE_STATE, extractionRate: 0 };
+
+    it('a extração consome reservas e acumula o total extraído', () => {
+      const result = simulateNation(BASE_STATE, CONSTANTS, START, hoursAfterStart(TICKS_PER_YEAR));
+
+      const ferro = result.state.deposits.find((deposit) => deposit.type === 'IRON');
+
+      expect(ferro).toBeDefined();
+      expect(ferro!.reserves).toBeLessThan(50_000_000n);
+      expect(ferro!.extractedTotal).toBeGreaterThan(0n);
+
+      // O que saiu do solo é exatamente o que entrou no total extraído.
+      expect(ferro!.reserves + ferro!.extractedTotal).toBe(50_000_000n);
+    });
+
+    it('intensidade zero não extrai, não rende e não polui', () => {
+      const result = simulateNation(semExtracao, CONSTANTS, START, hoursAfterStart(TICKS_PER_YEAR));
+
+      expect(result.state.deposits).toEqual(BASE_STATE.deposits);
+      expect(result.totals.extracted).toBe(0);
+      expect(result.totals.resourceRevenueCents).toBe(0);
+      expect(result.state.emissions).toBe(0);
+    });
+
+    it('quanto maior a intensidade, mais extração, receita e emissões', () => {
+      const baixa = simulateNation(
+        { ...BASE_STATE, extractionRate: 20 },
+        CONSTANTS,
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+      const alta = simulateNation(
+        { ...BASE_STATE, extractionRate: 100 },
+        CONSTANTS,
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+
+      expect(alta.totals.extracted).toBeGreaterThan(baixa.totals.extracted);
+      expect(alta.totals.resourceRevenueCents).toBeGreaterThan(baixa.totals.resourceRevenueCents);
+      expect(alta.state.emissions).toBeGreaterThan(baixa.state.emissions);
+    });
+
+    /** O custo de extrair rápido: o país fica rico agora e sem reserva depois. */
+    it('extrair no máximo esgota a reserva mais rápido que extrair devagar', () => {
+      const reservaDe = (state: typeof BASE_STATE, rate: number) =>
+        simulateNation({ ...state, extractionRate: rate }, CONSTANTS, START, hoursAfterStart(8760))
+          .state.deposits[0]!.reserves;
+
+      expect(reservaDe(BASE_STATE, 100)).toBeLessThan(reservaDe(BASE_STATE, 25));
+    });
+
+    it('a reserva nunca fica negativa, mesmo depois de muitos anos no máximo', () => {
+      let state = { ...BASE_STATE, extractionRate: 100 };
+      let marco = START;
+
+      // O catch-up é limitado a 1 ano por chamada, então repetimos.
+      for (let ano = 1; ano <= 10; ano += 1) {
+        const result = simulateNation(
+          state,
+          CONSTANTS,
+          marco,
+          hoursAfterStart(ano * TICKS_PER_YEAR),
+        );
+
+        state = { ...state, ...result.state };
+        marco = result.simulatedUntil;
+      }
+
+      for (const deposit of state.deposits) {
+        expect(deposit.reserves).toBeGreaterThanOrEqual(0n);
+      }
+    });
+
+    it('a receita da extração entra no tesouro do mesmo tick', () => {
+      const comRecursos = simulateNation(BASE_STATE, CONSTANTS, START, hoursAfterStart(720));
+      const sem = simulateNation(semExtracao, CONSTANTS, START, hoursAfterStart(720));
+
+      expect(comRecursos.state.economy.treasuryCents).toBeGreaterThan(
+        sem.state.economy.treasuryCents,
+      );
+    });
+
+    it('um país sem depósito algum é um estado válido', () => {
+      const result = simulateNation(
+        { ...BASE_STATE, deposits: [] },
+        CONSTANTS,
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+
+      expect(result.state.deposits).toEqual([]);
+      expect(result.totals.resourceRevenueCents).toBe(0);
+      // O resto do país segue simulando normalmente.
+      expect(result.state.population.total).toBeGreaterThan(BASE_STATE.population.total);
+    });
+
+    it('tecnologia e infraestrutura aumentam a extração', () => {
+      const atrasado = simulateNation(
+        BASE_STATE,
+        { technology: 0, infrastructure: 0 },
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+      const avancado = simulateNation(
+        BASE_STATE,
+        { technology: 100, infrastructure: 100 },
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+
+      expect(avancado.totals.extracted).toBeGreaterThan(atrasado.totals.extracted);
     });
   });
 });

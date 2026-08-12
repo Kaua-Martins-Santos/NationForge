@@ -5,6 +5,8 @@ import { EconomyService } from '../economy/economy.service';
 import { POPULATION_DEFAULTS } from '../population/population-defaults';
 import { PopulationService } from '../population/population.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RESOURCE_DEFAULTS } from '../resources/resource-defaults';
+import { ResourcesService } from '../resources/resources.service';
 import { SimulationService } from '../simulation/simulation.service';
 import type { CreateNationDto } from './dto/create-nation.dto';
 import { NATION_DEFAULTS } from './nation-defaults';
@@ -37,6 +39,7 @@ describe('NationsService', () => {
         NationsService,
         PopulationService,
         EconomyService,
+        ResourcesService,
         SimulationService,
         { provide: PrismaService, useValue: prisma },
       ],
@@ -63,6 +66,7 @@ describe('NationsService', () => {
           ...args.data,
           populationState: { id: 'pop-1' },
           economyState: { id: 'eco-1' },
+          resourceState: { id: 'res-1', deposits: [] },
         }),
       );
     }
@@ -89,7 +93,7 @@ describe('NationsService', () => {
       });
     });
 
-    it('cria os estados de população e economia na mesma operação que o país', async () => {
+    it('cria os estados de todos os domínios na mesma operação que o país', async () => {
       prisma.nation.findUnique.mockResolvedValue(null);
       mockCreateEchoingData();
 
@@ -98,6 +102,13 @@ describe('NationsService', () => {
       const data = createArgs().data as {
         populationState: { create: Record<string, unknown> };
         economyState: { create: Record<string, unknown> };
+        resourceState: {
+          create: {
+            extractionRate: number;
+            seed: number;
+            deposits: { create: { type: string; reserves: bigint }[] };
+          };
+        };
       };
 
       // Escrita aninhada = uma transação: um país sem seus domínios seria inválido.
@@ -111,6 +122,11 @@ describe('NationsService', () => {
         treasuryCents: ECONOMY_DEFAULTS.treasuryCents,
         taxRate: ECONOMY_DEFAULTS.taxRate,
       });
+
+      expect(data.resourceState.create.extractionRate).toBe(RESOURCE_DEFAULTS.extractionRate);
+
+      // A dotação natural vem sorteada junto, com o mínimo jogável garantido.
+      expect(data.resourceState.create.deposits.create.length).toBeGreaterThanOrEqual(3);
     });
 
     it('ignora atributos de jogo enviados pelo cliente', async () => {

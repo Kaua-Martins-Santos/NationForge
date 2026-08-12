@@ -82,6 +82,10 @@ model Nation {
   infrastructure Int
   emissions      Int
 
+  /// Resto fracionário das emissões, em milionésimos de ponto. Mesmo motivo do
+  /// `happinessCarryMicro`: a extração de um tick emite muito menos de um ponto.
+  emissionsCarryMicro Int @default(0)
+
   /// Marco temporal da simulação: até quando os ticks já foram aplicados.
   ///
   /// Mora em Nation, e não em um domínio, porque o tempo é do país inteiro:
@@ -97,6 +101,7 @@ model Nation {
 
   populationState PopulationState?
   economyState    EconomyState?
+  resourceState   ResourceState?
 
   @@map("nations")
 }
@@ -176,4 +181,82 @@ model EconomyState {
   updatedAt DateTime @updatedAt
 
   @@map("economy_states")
+}
+
+/// Recursos naturais do jogo (CLAUDE.md seção 14).
+///
+/// Enum, e não texto livre: cada valor tem preço, fator de emissão e raridade
+/// definidos no catálogo do servidor. Adicionar um recurso novo é adicionar um
+/// valor aqui e uma entrada lá — o resto das regras não muda.
+enum ResourceType {
+  IRON
+  OIL
+  COAL
+  GOLD
+  TIMBER
+  WATER
+  NATURAL_GAS
+  URANIUM
+}
+
+/// Estado do domínio Recursos de um país.
+///
+/// Guarda o que é do país como um todo; os depósitos, que são vários, ficam em
+/// `ResourceDeposit`.
+model ResourceState {
+  id       String @id @default(uuid())
+  nationId String @unique
+  nation   Nation @relation(fields: [nationId], references: [id], onDelete: Cascade)
+
+  /// Intensidade de extração escolhida pelo jogador, 0 a 100.
+  ///
+  /// A decisão desta fase: extrair rápido rende dinheiro agora, mas consome
+  /// reservas que não voltam e emite mais.
+  extractionRate Int
+
+  /// Semente da dotação natural do país.
+  ///
+  /// A geração é determinística dada a semente — mesma semente, mesmos
+  /// depósitos, o que a torna testável e reproduzível. A semente é sorteada
+  /// pelo servidor e persistida, em vez de derivada do nome do país: derivar do
+  /// nome deixaria o jogador procurar nomes até achar uma dotação boa.
+  seed Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deposits ResourceDeposit[]
+
+  @@map("resource_states")
+}
+
+/// Um depósito de um recurso em um país.
+///
+/// Um registro por (país, recurso), e só para os recursos que o país de fato
+/// possui — a ausência de linha significa "este país não tem esse recurso", que
+/// é o que vai dar sentido ao comércio (seção 22).
+model ResourceDeposit {
+  id              String        @id @default(uuid())
+  resourceStateId String
+  resourceState   ResourceState @relation(fields: [resourceStateId], references: [id], onDelete: Cascade)
+
+  type ResourceType
+
+  /// Unidades ainda no solo. Finitas: o que sai não volta.
+  reserves BigInt
+
+  /// Total já extraído ao longo da história do país.
+  ///
+  /// Não é usado por nenhuma regra — existe para relatórios (Fase 21) e
+  /// conquistas (Fase 31) poderem falar do que o país produziu.
+  extractedTotal BigInt @default(0)
+
+  /// Resto fracionário da extração, em milionésimos de unidade.
+  extractionCarryMicro Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([resourceStateId, type])
+  @@map("resource_deposits")
 }

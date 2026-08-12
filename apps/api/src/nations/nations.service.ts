@@ -3,6 +3,7 @@ import type { Nation } from '../../generated/prisma/client';
 import { EconomyService } from '../economy/economy.service';
 import { PopulationService } from '../population/population.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ResourcesService } from '../resources/resources.service';
 import { SimulationService, type SimulatedNation } from '../simulation/simulation.service';
 import type { CreateNationDto } from './dto/create-nation.dto';
 import { NATION_DEFAULTS } from './nation-defaults';
@@ -13,6 +14,7 @@ export class NationsService {
     private readonly prisma: PrismaService,
     private readonly populationService: PopulationService,
     private readonly economyService: EconomyService,
+    private readonly resourcesService: ResourcesService,
     private readonly simulationService: SimulationService,
   ) {}
 
@@ -39,7 +41,11 @@ export class NationsService {
   private async loadOrFail(userId: string): Promise<SimulatedNation> {
     const nation = await this.prisma.nation.findUnique({
       where: { userId },
-      include: { populationState: true, economyState: true },
+      include: {
+        populationState: true,
+        economyState: true,
+        resourceState: { include: { deposits: true } },
+      },
     });
 
     if (!nation) {
@@ -48,11 +54,16 @@ export class NationsService {
 
     // Todo país é criado junto dos seus domínios, na mesma transação — então a
     // ausência aqui significaria dado corrompido, não um caso normal.
-    if (!nation.populationState || !nation.economyState) {
+    if (!nation.populationState || !nation.economyState || !nation.resourceState) {
       throw new NotFoundException('Estado interno do país não encontrado.');
     }
 
-    return { nation, population: nation.populationState, economy: nation.economyState };
+    return {
+      nation,
+      population: nation.populationState,
+      economy: nation.economyState,
+      resources: nation.resourceState,
+    };
   }
 
   /**
@@ -85,6 +96,30 @@ export class NationsService {
     return { ...current, economy };
   }
 
+  /**
+   * Altera a intensidade de extração de recursos.
+   *
+   * Simula antes de alterar, pelo mesmo motivo do `setTaxRate`: o período que já
+   * passou tem de ser fechado na intensidade que de fato valeu nele, senão
+   * bastaria deixar em zero e subir para 100% um instante antes da leitura para
+   * extrair o mês inteiro no máximo.
+   */
+  async setExtractionRate(
+    userId: string,
+    extractionRate: number,
+    now: Date,
+  ): Promise<SimulatedNation> {
+    const current = await this.findCurrentStateOrFail(userId, now);
+
+    const resourceState = await this.prisma.resourceState.update({
+      where: { id: current.resources.id },
+      data: { extractionRate },
+      include: { deposits: true },
+    });
+
+    return { ...current, resources: resourceState };
+  }
+
   async create(userId: string, dto: CreateNationDto, now: Date): Promise<SimulatedNation> {
     const existingNation = await this.findByUserId(userId);
     if (existingNation) {
@@ -114,15 +149,25 @@ export class NationsService {
         simulatedUntil: now,
         populationState: { create: this.populationService.buildInitialState() },
         economyState: { create: this.economyService.buildInitialState() },
+        resourceState: { create: this.resourcesService.buildInitialState() },
       },
-      include: { populationState: true, economyState: true },
+      include: {
+        populationState: true,
+        economyState: true,
+        resourceState: { include: { deposits: true } },
+      },
     });
 
     // O include garante os valores; o if existe para satisfazer o tipo.
-    if (!nation.populationState || !nation.economyState) {
+    if (!nation.populationState || !nation.economyState || !nation.resourceState) {
       throw new Error('Falha ao criar o estado interno do país.');
     }
 
-    return { nation, population: nation.populationState, economy: nation.economyState };
+    return {
+      nation,
+      population: nation.populationState,
+      economy: nation.economyState,
+      resources: nation.resourceState,
+    };
   }
 }
