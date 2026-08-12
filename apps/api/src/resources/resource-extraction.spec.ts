@@ -196,14 +196,15 @@ describe('applyDepositTick', () => {
     expect(vazio.delta.extracted).toBeLessThan(cheio.delta.extracted);
   });
 
-  it('um ano de ticks extrai o que a projeção anual prometeu', () => {
+  it('um ano de ticks extrai perto do que a projeção anual prometeu', () => {
     // A projeção usa a reserva inicial; como ela cai ao longo do ano, o total
-    // real fica um pouco abaixo — mas na mesma ordem de grandeza.
+    // real fica um pouco abaixo. É por isso que `yearsRemaining` na resposta da
+    // API é documentado como estimativa otimista.
     const projetado = annualExtraction(BASE_DEPOSIT.reserves, BASE_CONTEXT);
     const real = runTicks(BASE_DEPOSIT, BASE_CONTEXT, TICKS_PER_YEAR).extracted;
 
     expect(real).toBeLessThanOrEqual(projetado);
-    expect(real).toBeGreaterThan(projetado * 0.98);
+    expect(real).toBeGreaterThan(projetado * 0.95);
   });
 
   it('emite proporcionalmente ao que foi extraído', () => {

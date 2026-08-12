@@ -32,8 +32,14 @@ export const MAX_EXTRACTION_RATE = 100;
 /**
  * Fração da reserva que sai em um ano com a extração no máximo e sem nenhuma
  * tecnologia ou infraestrutura.
+ *
+ * Calibrado contra a receita de impostos, não escolhido no vácuo: a 2% a
+ * extração valia 2,5% da arrecadação e esgotar metade de um depósito levava
+ * ~78 anos, então nem o ganho nem o custo da decisão apareciam. A 8%, a
+ * extração pesa cerca de 10% da receita e a diferença entre extrair a 40% ou a
+ * 100% se torna visível na reserva.
  */
-const BASE_ANNUAL_EXTRACTION_FRACTION = 0.02;
+const BASE_ANNUAL_EXTRACTION_FRACTION = 0.08;
 
 /**
  * Peso de tecnologia e infraestrutura na capacidade de extração. Nos valores
