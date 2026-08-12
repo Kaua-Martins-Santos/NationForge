@@ -37,18 +37,35 @@ function NationDashboard({ nation }: { nation: Nation }) {
         </button>
       </header>
 
-      <HeroFigure label="População" value={nation.population} unit="habitantes" />
+      <HeroFigure label="População" value={nation.population.total} unit="habitantes" />
+
+      <StatGroup title="Demografia">
+        <StatTile
+          label="Natalidade"
+          value={`${nation.population.birthRatePerThousand}‰`}
+          unit="ao ano"
+        />
+        <StatTile
+          label="Mortalidade"
+          value={`${nation.population.deathRatePerThousand}‰`}
+          unit="ao ano"
+        />
+        <StatTile label="Empregados" value={formatCompact(nation.population.employed)} />
+        <StatTile label="Desemprego" value={`${nation.population.unemploymentRate}%`} />
+      </StatGroup>
+
+      <StatGroup title="Sociedade">
+        <Meter label="Felicidade" value={nation.happiness} />
+        <Meter label="Estabilidade" value={nation.stability} />
+        <Meter label="Saúde" value={nation.population.health} />
+        <Meter label="Educação" value={nation.population.education} />
+      </StatGroup>
 
       <StatGroup title="Economia e território">
         <StatTile label="PIB" value={formatCompact(nation.gdp)} />
         <StatTile label="Tesouro" value={formatCompact(nation.treasury)} />
         <StatTile label="Território" value={formatCompact(nation.territory)} unit="km²" />
         <StatTile label="Emissões" value={formatCompact(nation.emissions)} />
-      </StatGroup>
-
-      <StatGroup title="Sociedade">
-        <Meter label="Felicidade" value={nation.happiness} />
-        <Meter label="Estabilidade" value={nation.stability} />
       </StatGroup>
 
       <StatGroup title="Desenvolvimento">
@@ -58,8 +75,8 @@ function NationDashboard({ nation }: { nation: Nation }) {
       </StatGroup>
 
       <p className="text-sm text-ink-muted">
-        Estes valores ainda são estáticos: a simulação que os faz evoluir com o tempo chega no
-        sistema de ticks.
+        A população já evolui com o tempo, calculada por hora decorrida. Economia, produção e os
+        demais atributos ainda são estáticos.
       </p>
     </main>
   );

@@ -51,13 +51,33 @@ export const GOVERNMENT_LABELS: Record<(typeof GOVERNMENT_TYPES)[number], string
   REPUBLIC: 'República',
 };
 
+/**
+ * Domínio População, aninhado na resposta do país.
+ *
+ * A API espelha na resposta a separação que existe no banco: cada domínio do jogo
+ * tem seu próprio objeto.
+ */
+export const populationSchema = z.object({
+  total: z.number(),
+  employed: z.number(),
+  unemployed: z.number(),
+  unemploymentRate: z.number(),
+  birthRatePerThousand: z.number(),
+  deathRatePerThousand: z.number(),
+  health: z.number(),
+  education: z.number(),
+  simulatedUntil: z.string(),
+});
+
+export type Population = z.infer<typeof populationSchema>;
+
 export const nationSchema = z.object({
   id: z.string(),
   name: z.string(),
   flag: z.string(),
   capital: z.string(),
   government: z.enum(GOVERNMENT_TYPES),
-  population: z.number(),
+  population: populationSchema,
   territory: z.number(),
   gdp: z.number(),
   treasury: z.number(),
