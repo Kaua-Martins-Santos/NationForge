@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/jwt.strategy';
+import { SetTaxRateDto } from '../economy/dto/set-tax-rate.dto';
 import { CreateNationDto } from './dto/create-nation.dto';
 import { NationsService } from './nations.service';
 import { toPublicNation, type PublicNation } from './public-nation';
@@ -23,24 +24,32 @@ export class NationsController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Body() dto: CreateNationDto,
   ): Promise<PublicNation> {
-    const { nation, population } = await this.nationsService.create(
-      currentUser.userId,
-      dto,
-      new Date(),
-    );
-
-    return toPublicNation(nation, population);
+    return toPublicNation(await this.nationsService.create(currentUser.userId, dto, new Date()));
   }
 
   @Get('me')
   async getMyNation(@CurrentUser() currentUser: AuthenticatedUser): Promise<PublicNation> {
     // A leitura põe a simulação em dia antes de responder: é o momento em que o
-    // tempo decorrido offline vira crescimento populacional.
-    const { nation, population } = await this.nationsService.findCurrentStateOrFail(
-      currentUser.userId,
-      new Date(),
+    // tempo decorrido offline vira população e dinheiro.
+    return toPublicNation(
+      await this.nationsService.findCurrentStateOrFail(currentUser.userId, new Date()),
     );
+  }
 
-    return toPublicNation(nation, population);
+  /**
+   * A decisão econômica do jogador (CLAUDE.md seção 13).
+   *
+   * PATCH, e não POST: altera um atributo de um recurso que já existe. Devolve o
+   * país inteiro porque mudar o imposto muda as projeções de receita e o rumo da
+   * felicidade — o cliente precisa do estado novo, não só da alíquota.
+   */
+  @Patch('me/tax-rate')
+  async setTaxRate(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: SetTaxRateDto,
+  ): Promise<PublicNation> {
+    return toPublicNation(
+      await this.nationsService.setTaxRate(currentUser.userId, dto.taxRate, new Date()),
+    );
   }
 }

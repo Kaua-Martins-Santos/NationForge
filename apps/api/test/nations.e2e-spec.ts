@@ -3,6 +3,7 @@ import { configureApp } from '../src/configure-app';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { ECONOMY_DEFAULTS } from '../src/economy/economy-defaults';
 import { NATION_DEFAULTS } from '../src/nations/nation-defaults';
 import { POPULATION_DEFAULTS } from '../src/population/population-defaults';
 import { PrismaService } from '../src/prisma/prisma.service';
@@ -48,8 +49,19 @@ describe('Nations (e2e)', () => {
     await app.close();
   });
 
-  function authenticated(method: 'get' | 'post', path: string) {
+  function authenticated(method: 'get' | 'post' | 'patch', path: string) {
     return request(app.getHttpServer())[method](path).set('Authorization', `Bearer ${accessToken}`);
+  }
+
+  /**
+   * Empurra o marco da simulação para o passado direto no banco, simulando um
+   * jogador que ficou offline — sem precisar esperar horas de verdade.
+   */
+  async function rewindSimulation(hours: number): Promise<void> {
+    await prisma.nation.update({
+      where: { name: nationName },
+      data: { simulatedUntil: new Date(Date.now() - hours * 60 * 60 * 1000) },
+    });
   }
 
   it('exige autenticação', async () => {
@@ -86,14 +98,16 @@ describe('Nations (e2e)', () => {
       name: nationName,
       capital: 'Cidade Aurora',
       government: 'REPUBLIC',
-      treasury: Number(NATION_DEFAULTS.treasury),
-      gdp: Number(NATION_DEFAULTS.gdp),
       happiness: NATION_DEFAULTS.happiness,
       emissions: NATION_DEFAULTS.emissions,
       population: {
         total: Number(POPULATION_DEFAULTS.total),
         health: POPULATION_DEFAULTS.health,
         education: POPULATION_DEFAULTS.education,
+      },
+      economy: {
+        treasury: Number(ECONOMY_DEFAULTS.treasuryCents) / 100,
+        taxRate: ECONOMY_DEFAULTS.taxRate,
       },
     });
     expect(response.body).toHaveProperty('id');
@@ -127,19 +141,27 @@ describe('Nations (e2e)', () => {
 
     expect(body).toMatchObject({ name: nationName });
 
-    // BigInt e Decimal do Prisma não sobrevivem a JSON.stringify sem conversão;
-    // o mapeador precisa entregá-los como números.
+    // BigInt não sobrevive a JSON.stringify sem conversão; o mapeador precisa
+    // entregar população e dinheiro como números.
     const population = body.population as Record<string, unknown>;
+    const economy = body.economy as Record<string, unknown>;
+
     expect(typeof population.total).toBe('number');
-    expect(typeof body.treasury).toBe('number');
-    expect(typeof body.gdp).toBe('number');
+    expect(typeof economy.treasury).toBe('number');
+    expect(typeof economy.gdp).toBe('number');
   });
 
-  it('não expõe o resto interno da simulação', async () => {
+  it('não expõe os restos internos da simulação', async () => {
     const response = await authenticated('get', '/nations/me').expect(200);
-    const population = (response.body as { population: Record<string, unknown> }).population;
+    const body = response.body as {
+      population: Record<string, unknown>;
+      economy: Record<string, unknown>;
+    };
 
-    expect(population).not.toHaveProperty('growthCarryMicro');
+    expect(body.population).not.toHaveProperty('growthCarryMicro');
+    expect(body.economy).not.toHaveProperty('treasuryCarryMicro');
+    expect(body.economy).not.toHaveProperty('treasuryCents');
+    expect(body).not.toHaveProperty('happinessCarryMicro');
   });
 
   it('deriva emprego e desemprego da população', async () => {
@@ -151,19 +173,6 @@ describe('Nations (e2e)', () => {
   });
 
   describe('crescimento por tempo decorrido', () => {
-    /**
-     * Empurra o marco da simulação para o passado direto no banco, simulando um
-     * jogador que ficou offline — sem precisar esperar horas de verdade.
-     */
-    async function rewindSimulation(hours: number): Promise<void> {
-      const nation = await prisma.nation.findFirstOrThrow({ where: { name: nationName } });
-
-      await prisma.populationState.update({
-        where: { nationId: nation.id },
-        data: { simulatedUntil: new Date(Date.now() - hours * 60 * 60 * 1000) },
-      });
-    }
-
     it('recarregar dentro da mesma hora não gera população', async () => {
       await rewindSimulation(0);
 
@@ -199,6 +208,96 @@ describe('Nations (e2e)', () => {
 
       // A segunda leitura não avança de novo: o marco já foi gravado.
       expect(total(segunda.body)).toBe(total(primeira.body));
+    });
+
+    it('o tesouro também evolui com o tempo offline', async () => {
+      const antes = await authenticated('get', '/nations/me').expect(200);
+
+      await rewindSimulation(30 * 24);
+
+      const depois = await authenticated('get', '/nations/me').expect(200);
+
+      const treasury = (body: unknown) =>
+        (body as { economy: { treasury: number } }).economy.treasury;
+
+      expect(treasury(depois.body)).not.toBe(treasury(antes.body));
+    });
+  });
+
+  describe('alíquota de imposto', () => {
+    it('exige autenticação', async () => {
+      await request(app.getHttpServer())
+        .patch('/nations/me/tax-rate')
+        .send({ taxRate: 30 })
+        .expect(401);
+    });
+
+    it('rejeita alíquota fora de 0–100', async () => {
+      await authenticated('patch', '/nations/me/tax-rate').send({ taxRate: 101 }).expect(400);
+      await authenticated('patch', '/nations/me/tax-rate').send({ taxRate: -1 }).expect(400);
+      await authenticated('patch', '/nations/me/tax-rate').send({ taxRate: 12.5 }).expect(400);
+    });
+
+    it('rejeita campos que o jogador não escolhe', async () => {
+      await authenticated('patch', '/nations/me/tax-rate')
+        .send({ taxRate: 30, treasuryCents: 999_999_999 })
+        .expect(400);
+    });
+
+    it('persiste a alíquota e recalcula a receita projetada', async () => {
+      const antes = await authenticated('get', '/nations/me').expect(200);
+      const receitaAntes = (antes.body as { economy: { annualRevenue: number } }).economy
+        .annualRevenue;
+
+      const resposta = await authenticated('patch', '/nations/me/tax-rate')
+        .send({ taxRate: 50 })
+        .expect(200);
+
+      const economy = (resposta.body as { economy: { taxRate: number; annualRevenue: number } })
+        .economy;
+
+      expect(economy.taxRate).toBe(50);
+      expect(economy.annualRevenue).toBeGreaterThan(receitaAntes);
+
+      // E continua valendo na próxima leitura.
+      const depois = await authenticated('get', '/nations/me').expect(200);
+      expect((depois.body as { economy: { taxRate: number } }).economy.taxRate).toBe(50);
+    });
+
+    /**
+     * O exploit que o `setTaxRate` fecha ao simular ANTES de gravar: ficar um mês
+     * com imposto baixo e subi-lo no último instante não pode arrecadar o mês
+     * inteiro na alíquota nova.
+     */
+    it('fecha o período na alíquota que valeu nele, não na nova', async () => {
+      // Zera o imposto e fecha a simulação neste instante.
+      const zerado = await authenticated('patch', '/nations/me/tax-rate')
+        .send({ taxRate: 0 })
+        .expect(200);
+
+      const treasuryAntes = (zerado.body as { economy: { treasury: number } }).economy.treasury;
+
+      // Um mês se passa com o imposto em zero...
+      await rewindSimulation(30 * 24);
+
+      // ...e só então o jogador tenta subir a alíquota ao máximo.
+      const resposta = await authenticated('patch', '/nations/me/tax-rate')
+        .send({ taxRate: 100 })
+        .expect(200);
+
+      const body = resposta.body as {
+        economy: { taxRate: number; treasury: number };
+        simulatedUntil: string;
+      };
+
+      expect(body.economy.taxRate).toBe(100);
+
+      // O mês rodou com imposto zero: o país só gastou. Se o período fosse
+      // fechado na alíquota nova, o tesouro teria subido em vez de cair.
+      expect(body.economy.treasury).toBeLessThan(treasuryAntes);
+
+      // E o marco foi fechado antes da troca.
+      expect(new Date(body.simulatedUntil).getTime()).toBeLessThanOrEqual(Date.now());
     });
   });
 });

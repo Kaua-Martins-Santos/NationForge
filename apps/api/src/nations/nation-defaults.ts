@@ -9,17 +9,13 @@
  * afeta apenas países criados a partir de então.
  */
 export const NATION_DEFAULTS = {
-  // A população inicial não está aqui: ela pertence ao domínio População
-  // (ver POPULATION_DEFAULTS), dono único desse dado.
+  // População e dinheiro não estão aqui: pertencem aos domínios População e
+  // Economia (ver POPULATION_DEFAULTS e ECONOMY_DEFAULTS), donos únicos desses
+  // dados. O PIB não tem valor inicial porque não é armazenado — é derivado da
+  // força de trabalho a cada leitura.
 
   /** Em km². */
   territory: 100_000,
-
-  /** PIB inicial, na moeda do jogo. */
-  gdp: '10000000.00',
-
-  /** Tesouro nacional inicial. */
-  treasury: '5000000.00',
 
   /** Índices de 0 a 100: começam em um patamar neutro-positivo. */
   happiness: 60,

@@ -1,8 +1,11 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ECONOMY_DEFAULTS } from '../economy/economy-defaults';
+import { EconomyService } from '../economy/economy.service';
 import { POPULATION_DEFAULTS } from '../population/population-defaults';
 import { PopulationService } from '../population/population.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SimulationService } from '../simulation/simulation.service';
 import type { CreateNationDto } from './dto/create-nation.dto';
 import { NATION_DEFAULTS } from './nation-defaults';
 import { NationsService } from './nations.service';
@@ -18,13 +21,25 @@ const NOW = new Date('2026-01-01T00:00:00.000Z');
 
 describe('NationsService', () => {
   let nationsService: NationsService;
-  let prisma: { nation: { findUnique: jest.Mock; create: jest.Mock } };
+  let prisma: {
+    nation: { findUnique: jest.Mock; create: jest.Mock };
+    economyState: { update: jest.Mock };
+  };
 
   beforeEach(async () => {
-    prisma = { nation: { findUnique: jest.fn(), create: jest.fn() } };
+    prisma = {
+      nation: { findUnique: jest.fn(), create: jest.fn() },
+      economyState: { update: jest.fn() },
+    };
 
     const moduleRef = await Test.createTestingModule({
-      providers: [NationsService, PopulationService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        NationsService,
+        PopulationService,
+        EconomyService,
+        SimulationService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     nationsService = moduleRef.get(NationsService);
@@ -41,11 +56,21 @@ describe('NationsService', () => {
   });
 
   describe('create', () => {
-    /** O create usa escrita aninhada, então o mock devolve o país já com o estado. */
+    /** O create usa escrita aninhada, então o mock devolve o país já com os estados. */
     function mockCreateEchoingData() {
       prisma.nation.create.mockImplementation((args: { data: Record<string, unknown> }) =>
-        Promise.resolve({ ...args.data, populationState: { id: 'pop-1' } }),
+        Promise.resolve({
+          ...args.data,
+          populationState: { id: 'pop-1' },
+          economyState: { id: 'eco-1' },
+        }),
       );
+    }
+
+    function createArgs(): { data: Record<string, unknown> } {
+      const [args] = prisma.nation.create.mock.calls[0] as [{ data: Record<string, unknown> }];
+
+      return args;
     }
 
     it('aplica os valores iniciais do servidor', async () => {
@@ -54,35 +79,37 @@ describe('NationsService', () => {
 
       await nationsService.create('user-1', VALID_DTO, NOW);
 
-      const [createArgs] = prisma.nation.create.mock.calls[0] as [
-        { data: Record<string, unknown> },
-      ];
-
-      expect(createArgs.data).toMatchObject({
+      expect(createArgs().data).toMatchObject({
         userId: 'user-1',
         name: VALID_DTO.name,
         government: 'REPUBLIC',
-        treasury: NATION_DEFAULTS.treasury,
         happiness: NATION_DEFAULTS.happiness,
+        // O marco começa agora: um país recém-fundado não tem passado a simular.
+        simulatedUntil: NOW,
       });
     });
 
-    it('cria o estado demográfico na mesma operação que o país', async () => {
+    it('cria os estados de população e economia na mesma operação que o país', async () => {
       prisma.nation.findUnique.mockResolvedValue(null);
       mockCreateEchoingData();
 
       await nationsService.create('user-1', VALID_DTO, NOW);
 
-      const [createArgs] = prisma.nation.create.mock.calls[0] as [
-        { data: { populationState?: { create: Record<string, unknown> } } },
-      ];
+      const data = createArgs().data as {
+        populationState: { create: Record<string, unknown> };
+        economyState: { create: Record<string, unknown> };
+      };
 
-      // Escrita aninhada = uma transação: um país sem demografia seria inválido.
-      expect(createArgs.data.populationState?.create).toMatchObject({
+      // Escrita aninhada = uma transação: um país sem seus domínios seria inválido.
+      expect(data.populationState.create).toMatchObject({
         total: POPULATION_DEFAULTS.total,
         health: POPULATION_DEFAULTS.health,
         education: POPULATION_DEFAULTS.education,
-        simulatedUntil: NOW,
+      });
+
+      expect(data.economyState.create).toMatchObject({
+        treasuryCents: ECONOMY_DEFAULTS.treasuryCents,
+        taxRate: ECONOMY_DEFAULTS.taxRate,
       });
     });
 
@@ -90,23 +117,33 @@ describe('NationsService', () => {
       prisma.nation.findUnique.mockResolvedValue(null);
       mockCreateEchoingData();
 
-      // Simula um cliente malicioso tentando escolher o próprio tesouro. O
-      // ValidationPipe global já rejeitaria a requisição antes disso; este teste
-      // garante que o service também não confia no dto.
+      // Simula um cliente malicioso tentando escolher o próprio tesouro e a
+      // própria alíquota. O ValidationPipe global já rejeitaria a requisição
+      // antes disso; este teste garante que o service também não confia no dto.
       const maliciousDto = {
         ...VALID_DTO,
-        treasury: '999999999.00',
+        treasuryCents: 999_999_999_900n,
+        taxRate: 0,
         population: 50_000_000n,
       } as CreateNationDto;
 
       await nationsService.create('user-1', maliciousDto, NOW);
 
-      const [createArgs] = prisma.nation.create.mock.calls[0] as [
-        { data: Record<string, unknown> & { populationState: { create: { total: bigint } } } },
-      ];
+      const data = createArgs().data as {
+        treasuryCents?: unknown;
+        taxRate?: unknown;
+        populationState: { create: { total: bigint } };
+        economyState: { create: { treasuryCents: bigint; taxRate: number } };
+      };
 
-      expect(createArgs.data.treasury).toBe(NATION_DEFAULTS.treasury);
-      expect(createArgs.data.populationState.create.total).toBe(POPULATION_DEFAULTS.total);
+      // Os campos do cliente não viram colunas da nação...
+      expect(data.treasuryCents).toBeUndefined();
+      expect(data.taxRate).toBeUndefined();
+
+      // ...nem contaminam os domínios, que usam sempre os defaults do servidor.
+      expect(data.economyState.create.treasuryCents).toBe(ECONOMY_DEFAULTS.treasuryCents);
+      expect(data.economyState.create.taxRate).toBe(ECONOMY_DEFAULTS.taxRate);
+      expect(data.populationState.create.total).toBe(POPULATION_DEFAULTS.total);
     });
 
     it('rejeita quando o jogador já tem um país', async () => {
