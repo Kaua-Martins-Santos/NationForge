@@ -9,13 +9,17 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 11 — Economia.** O jogo ganhou a primeira **decisão com consequência**: o jogador
-define a alíquota de imposto, que move receita, tesouro e felicidade — e, como felicidade
-move a migração, a escolha econômica volta como consequência demográfica.
+**Fase 12 — Recursos.** Cada país nasce com uma **dotação natural diferente** — ferro,
+petróleo, urânio, água — sorteada por semente. A escassez é o ponto: nenhum país tem tudo, e
+é isso que vai dar motivo ao comércio.
 
-Para isso, população e economia passaram a avançar em um **único laço de ticks**. Com laços
-separados, esperar offline renderia mais dinheiro que jogar; o laço conjunto fecha essa
-brecha. É um pedaço da Fase 19 antecipado por necessidade técnica.
+A decisão que isso habilita é a intensidade de extração. Reservas são finitas: extrair
+rápido rende agora, esgota depois e polui mais.
+
+Antes: **Fase 11 — Economia**, a primeira decisão com consequência — a alíquota de imposto
+move receita, tesouro e felicidade, e como felicidade move a migração, a escolha econômica
+volta como consequência demográfica. Para isso, os domínios passaram a avançar em um
+**único laço de ticks**: com laços separados, esperar offline renderia mais que jogar.
 
 Antes: **Fase 10 — População**, o primeiro número que se move sozinho — nascimentos, mortes
 e migração calculados pelo tempo decorrido, sem processo algum rodando em background. E o
@@ -27,7 +31,7 @@ backend NestJS (Fase 4), frontend Next.js (Fase 5), autenticação com JWT (Fase
 do jogador (Fase 7), criação de países pela API (Fase 8) e telas de autenticação
 (Fase 9a).
 
-Os demais atributos ainda **não evoluem**: recursos (Fase 12), produção (Fase 13) e o
+Os demais atributos ainda **não evoluem**: produção (Fase 13), agricultura (Fase 14) e o
 restante do roadmap virão depois. A camada visual é provisória — um redesign completo está
 planejado.
 

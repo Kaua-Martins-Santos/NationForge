@@ -34,6 +34,7 @@ PATCH /users/me/password    🔒 { currentPassword, newPassword } →  204 (sem 
 POST  /nations              🔒 { name, flag, capital, government } →  201 país criado
 GET   /nations/me           🔒                                 →  país do jogador (404 se não tem)
 PATCH /nations/me/tax-rate  🔒 { taxRate }                     →  país com a alíquota nova
+PATCH /nations/me/extraction-rate 🔒 { extractionRate }        →  país com a intensidade nova
 ```
 
 `GET /nations/me` põe a simulação em dia antes de responder, e traz cada domínio aninhado:
@@ -61,6 +62,21 @@ PATCH /nations/me/tax-rate  🔒 { taxRate }                     →  país com 
     "annualExpenses": 1200000000,
     "annualBalance": 1468000000
   },
+  "resources": {
+    "extractionRate": 40,
+    "annualRevenue": 197000000,
+    "deposits": [
+      {
+        "type": "IRON",
+        "label": "Ferro",
+        "reserves": 84900000,
+        "extractedTotal": 0,
+        "annualExtraction": 2989440,
+        "annualRevenue": 174867000,
+        "yearsRemaining": 28
+      }
+    ]
+  },
   "simulatedUntil": "..."
 }
 ```
@@ -68,8 +84,8 @@ PATCH /nations/me/tax-rate  🔒 { taxRate }                     →  país com 
 `simulatedUntil` é o "as of" de todos os números: a simulação avança em ticks de 1 hora,
 então a resposta reflete o último tick **inteiro**, não o instante da requisição.
 
-`PATCH /nations/me/tax-rate` põe a simulação em dia **antes** de gravar a alíquota nova,
-fechando o período na alíquota que de fato valeu nele.
+Os dois `PATCH` põem a simulação em dia **antes** de gravar o valor novo, fechando o
+período na configuração que de fato valeu nele.
 
 🔒 = exige autenticação, aceita **cookie de sessão** (usado pelo navegador) **ou**
 `Authorization: Bearer <token>` (útil para curl, Postman e testes).
@@ -252,6 +268,54 @@ Models atuais:
   rebalancear antes deles seria chutar.
 
 - **Fora do escopo desta fatia**: inflação, dívida pública formal, consumo e comércio.
+
+## Decisões da Fase 12 (recursos)
+
+- **Dotação sorteada, mas determinística**
+  ([`resource-endowment.ts`](./src/resources/resource-endowment.ts)). Países precisam ser
+  diferentes entre si — é o que vai dar motivo ao comércio (seção 22) —, mas "diferente"
+  não pode significar "imprevisível para o teste". Tudo sai de um gerador com semente
+  (mulberry32, seis linhas escritas à mão em vez de uma dependência), então a mesma semente
+  produz sempre a mesma dotação.
+
+  A semente é sorteada pelo servidor na fundação e **persistida**, não derivada do nome do
+  país: derivar do nome deixaria o jogador tentar nomes até cair numa dotação boa.
+
+  Isso não conflita com o determinismo exigido do tick (seção 25): aleatoriedade na fundação
+  é um evento único e persistido; o que precisa ser reproduzível é a simulação que roda
+  sobre o resultado.
+
+- **Extração proporcional ao que resta**, não um valor fixo por tick. Duas consequências,
+  ambas desejadas: o depósito desacelera em vez de secar de um dia para o outro, e a reserva
+  **nunca fica negativa por construção** — sem um `clamp` que esconderia erro de cálculo.
+
+- **A receita entra pelo contexto da economia**, não somada ao tesouro por fora. O tesouro
+  tem um dono só; se cada domínio somasse direto, cada um precisaria da sua própria
+  aritmética de resto acumulado e o total deixaria de fechar.
+
+- **O catálogo é o ponto de extensão**
+  ([`resource-catalog.ts`](./src/resources/resource-catalog.ts)): adicionar um recurso ao
+  jogo é um valor no enum do Prisma e uma entrada lá. Nenhuma regra de extração, receita ou
+  emissão muda.
+
+- **Um país sem depósito é estado válido.** A ausência de linha significa "este país não tem
+  esse recurso" — é justamente essa falta que vai criar demanda por comércio. A geração
+  garante um mínimo de 3 depósitos por jogabilidade, mas o laço de simulação lida com zero.
+
+- **Balanceamento calibrado contra a economia, não escolhido no vácuo.** A fração de
+  extração anual começou em 2%: a extração valia 2,5% da arrecadação e esgotar metade de um
+  depósito levava ~78 anos, então nem o ganho nem o custo da decisão apareciam. A 8%, a
+  extração pesa ~10% da receita e ir de 40% para 100% de intensidade derruba a duração de um
+  depósito de ~28 para ~11 anos.
+
+- **Emissões se movem, mas ainda não cobram nada.** A extração acumula `emissions` (com o
+  seu resto fracionário, pelo mesmo motivo dos demais). A consequência — poluição alta
+  custando saúde e felicidade — pertence a uma fase de meio ambiente, e inventá-la aqui
+  passaria por cima dela.
+
+- **Fora do escopo desta fatia**: estoque de recursos para uso industrial, cadeias de
+  produção e comércio entre países. Nesta fatia o extraído é vendido a um preço de
+  referência fixo — uma simplificação explícita até o mercado real existir (seção 22).
 
 ## Decisões da Fase 8 (países)
 
