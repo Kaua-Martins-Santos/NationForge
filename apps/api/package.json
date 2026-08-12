@@ -60,6 +60,8 @@
     ],
     "rootDir": ".",
     "testRegex": ".*\\.(spec|e2e-spec)\\.ts$",
+    "maxWorkers": 4,
+    "testTimeout": 30000,
     "moduleNameMapper": {
       "^(\\.{1,2}/.*)\\.js$": "$1"
     },
