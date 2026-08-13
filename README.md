@@ -9,12 +9,19 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 12 — Recursos.** Cada país nasce com uma **dotação natural diferente** — ferro,
-petróleo, urânio, água — sorteada por semente. A escassez é o ponto: nenhum país tem tudo, e
-é isso que vai dar motivo ao comércio.
+**Fase 13 — Produção.** O país passa a **beneficiar** o que extrai: ferro vira aço,
+petróleo vira combustível, madeira vira madeira serrada. A decisão é vender in natura ou
+processar — beneficiar quase dobra o que os recursos rendem.
 
-A decisão que isso habilita é a intensidade de extração. Reservas são finitas: extrair
-rápido rende agora, esgota depois e polui mais.
+O que impede a resposta óbvia ("processar tudo") é a **capacidade industrial**, que vem dos
+trabalhadores, da tecnologia e da infraestrutura. O que passa dela continua sendo vendido
+bruto, e processar polui bem mais que só extrair. Industrializar deixa de ser um botão e
+vira consequência de desenvolver o país.
+
+Antes: **Fase 12 — Recursos**, em que cada país nasce com uma **dotação natural diferente**
+— ferro, petróleo, urânio, água — sorteada por semente. A escassez é o ponto: nenhum país
+tem tudo, e é isso que vai dar motivo ao comércio. A decisão que ela habilita é a
+intensidade de extração, sobre reservas finitas: extrair rápido rende agora e esgota depois.
 
 Antes: **Fase 11 — Economia**, a primeira decisão com consequência — a alíquota de imposto
 move receita, tesouro e felicidade, e como felicidade move a migração, a escolha econômica
@@ -31,9 +38,10 @@ backend NestJS (Fase 4), frontend Next.js (Fase 5), autenticação com JWT (Fase
 do jogador (Fase 7), criação de países pela API (Fase 8) e telas de autenticação
 (Fase 9a).
 
-Os demais atributos ainda **não evoluem**: produção (Fase 13), agricultura (Fase 14) e o
-restante do roadmap virão depois. A camada visual é provisória — um redesign completo está
-planejado.
+Os demais atributos ainda **não evoluem**: agricultura (Fase 14), energia (Fase 16) e o
+restante do roadmap virão depois. As receitas de produção ainda não consomem energia — o
+insumo só existirá na Fase 16, e fingi-lo antes seria inventar número. A camada visual é
+provisória — um redesign completo está planejado.
 
 ## Requisitos
 
@@ -90,6 +98,10 @@ apps/
 │   ├── src/users/                perfil do jogador (/users/me)
 │   ├── src/nations/              criação e consulta do país
 │   ├── src/population/           demografia: crescimento, saúde, emprego
+│   ├── src/economy/              PIB, impostos, tesouro
+│   ├── src/resources/            dotação natural, extração, reservas
+│   ├── src/production/           catálogo de bens, receitas, capacidade industrial
+│   ├── src/simulation/           o laço de ticks que avança todos os domínios
 │   ├── src/prisma/                PrismaService/PrismaModule
 │   ├── test/                     testes e2e (Supertest)
 │   └── prisma/schema.prisma      model User + migrations
