@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { ProductionPanel } from '../../components/production-panel';
 import { RequireSession } from '../../components/require-session';
 import { ResourcesPanel } from '../../components/resources-panel';
 import { HeroFigure, Meter, StatGroup, StatTile } from '../../components/stats';
@@ -74,6 +75,8 @@ function NationDashboard({ nation }: { nation: Nation }) {
 
       <ResourcesPanel resources={nation.resources} />
 
+      <ProductionPanel production={nation.production} />
+
       <StatGroup title="Desenvolvimento">
         <StatTile label="Tecnologia" value={formatCompact(nation.technology)} />
         <StatTile label="Poder militar" value={formatCompact(nation.militaryPower)} />
@@ -81,9 +84,9 @@ function NationDashboard({ nation }: { nation: Nation }) {
       </StatGroup>
 
       <p className="text-sm text-ink-muted">
-        População e economia evoluem por hora decorrida, mesmo com você offline. Simulado até{' '}
-        {formatDateTime(nation.simulatedUntil)}. Produção, recursos e os demais atributos ainda são
-        estáticos.
+        População, economia, recursos e indústria evoluem por hora decorrida, mesmo com você
+        offline. Simulado até {formatDateTime(nation.simulatedUntil)}. Agricultura, energia e os
+        demais atributos ainda são estáticos.
       </p>
     </main>
   );

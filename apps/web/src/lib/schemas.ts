@@ -113,6 +113,38 @@ export const resourcesSchema = z.object({
 export type Deposit = z.infer<typeof depositSchema>;
 export type Resources = z.infer<typeof resourcesSchema>;
 
+/**
+ * Domínio Produção.
+ *
+ * Como em Recursos, os rótulos e as projeções vêm prontos do servidor: a receita
+ * de cada bem é regra de jogo, e recalculá-la aqui criaria uma segunda versão
+ * dela fadada a divergir.
+ */
+export const productionLineSchema = z.object({
+  good: z.string(),
+  label: z.string(),
+  input: z.string(),
+  inputLabel: z.string(),
+  inputPerUnit: z.number(),
+  allocation: z.number(),
+  producedTotal: z.number(),
+  annualProduction: z.number(),
+  annualInputConsumed: z.number(),
+  annualValueAdded: z.number(),
+  hasInput: z.boolean(),
+});
+
+export const productionSchema = z.object({
+  lines: z.array(productionLineSchema),
+  annualValueAdded: z.number(),
+  annualCapacity: z.number(),
+  annualDemand: z.number(),
+  capacityUsage: z.number(),
+});
+
+export type ProductionLine = z.infer<typeof productionLineSchema>;
+export type Production = z.infer<typeof productionSchema>;
+
 export const nationSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -122,6 +154,7 @@ export const nationSchema = z.object({
   population: populationSchema,
   economy: economySchema,
   resources: resourcesSchema,
+  production: productionSchema,
   territory: z.number(),
   happiness: z.number(),
   stability: z.number(),

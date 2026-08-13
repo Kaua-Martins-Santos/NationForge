@@ -88,3 +88,26 @@ export function useSetExtractionRate() {
     },
   });
 }
+
+/**
+ * Altera quanto de um insumo vai para a indústria.
+ *
+ * Uma mutation para todas as linhas, com o bem na variável: as linhas dividem a
+ * mesma capacidade industrial, então mexer em uma muda as projeções das outras —
+ * e a resposta traz o país inteiro justamente por isso.
+ */
+export function useSetProductionAllocation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ good, allocation }: { good: string; allocation: number }) =>
+      apiRequest('/nations/me/production', {
+        method: 'PATCH',
+        body: { good, allocation },
+        schema: nationSchema,
+      }),
+    onSuccess: (nation) => {
+      queryClient.setQueryData(NATION_QUERY_KEY, nation);
+    },
+  });
+}
