@@ -5,6 +5,9 @@ import { EconomyService } from '../economy/economy.service';
 import { POPULATION_DEFAULTS } from '../population/population-defaults';
 import { PopulationService } from '../population/population.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { GOOD_ORDER } from '../production/good-catalog';
+import { PRODUCTION_DEFAULTS } from '../production/production-defaults';
+import { ProductionService } from '../production/production.service';
 import { RESOURCE_DEFAULTS } from '../resources/resource-defaults';
 import { ResourcesService } from '../resources/resources.service';
 import { SimulationService } from '../simulation/simulation.service';
@@ -40,6 +43,7 @@ describe('NationsService', () => {
         PopulationService,
         EconomyService,
         ResourcesService,
+        ProductionService,
         SimulationService,
         { provide: PrismaService, useValue: prisma },
       ],
@@ -67,6 +71,7 @@ describe('NationsService', () => {
           populationState: { id: 'pop-1' },
           economyState: { id: 'eco-1' },
           resourceState: { id: 'res-1', deposits: [] },
+          productionLines: [],
         }),
       );
     }
@@ -109,6 +114,7 @@ describe('NationsService', () => {
             deposits: { create: { type: string; reserves: bigint }[] };
           };
         };
+        productionLines: { create: { good: string; allocation: number }[] };
       };
 
       // Escrita aninhada = uma transação: um país sem seus domínios seria inválido.
@@ -127,6 +133,11 @@ describe('NationsService', () => {
 
       // A dotação natural vem sorteada junto, com o mínimo jogável garantido.
       expect(data.resourceState.create.deposits.create.length).toBeGreaterThanOrEqual(3);
+
+      // Uma linha de produção por bem do catálogo, inclusive para os bens cujo
+      // insumo o país não sorteou — a decisão existe antes do insumo.
+      expect(data.productionLines.create).toHaveLength(GOOD_ORDER.length);
+      expect(data.productionLines.create[0]!.allocation).toBe(PRODUCTION_DEFAULTS.allocation);
     });
 
     it('ignora atributos de jogo enviados pelo cliente', async () => {

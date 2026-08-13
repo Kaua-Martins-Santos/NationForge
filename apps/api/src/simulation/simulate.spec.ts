@@ -32,6 +32,13 @@ const BASE_STATE: SimulationState = {
     },
   ],
   extractionRate: 40,
+  // Aço sai do ferro que o país tem; as demais linhas existem sem insumo, que é
+  // um estado normal — a decisão continua lá esperando o comércio trazer o resto.
+  productionLines: [
+    { good: 'PLANKS', allocation: 30, producedTotal: 0n, productionCarryMicro: 0 },
+    { good: 'STEEL', allocation: 30, producedTotal: 0n, productionCarryMicro: 0 },
+    { good: 'FUEL', allocation: 30, producedTotal: 0n, productionCarryMicro: 0 },
+  ],
   happiness: 60,
   happinessCarryMicro: 0,
   emissions: 0,
@@ -343,6 +350,23 @@ describe('simulateNation', () => {
       expect(result.state.population.total).toBeGreaterThan(BASE_STATE.population.total);
     });
 
+    it('a produção não mexe em reservas: ela consome o que já foi extraído', () => {
+      const semProducao = simulateNation(
+        { ...BASE_STATE, productionLines: [] },
+        CONSTANTS,
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+      const comProducao = simulateNation(
+        BASE_STATE,
+        CONSTANTS,
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+
+      expect(comProducao.state.deposits).toEqual(semProducao.state.deposits);
+    });
+
     it('tecnologia e infraestrutura aumentam a extração', () => {
       const atrasado = simulateNation(
         BASE_STATE,
@@ -358,6 +382,81 @@ describe('simulateNation', () => {
       );
 
       expect(avancado.totals.extracted).toBeGreaterThan(atrasado.totals.extracted);
+    });
+  });
+
+  describe('produção', () => {
+    const semBeneficiamento: SimulationState = {
+      ...BASE_STATE,
+      productionLines: BASE_STATE.productionLines.map((line) => ({ ...line, allocation: 0 })),
+    };
+
+    const anoDe = (state: SimulationState) =>
+      simulateNation(state, CONSTANTS, START, hoursAfterStart(TICKS_PER_YEAR));
+
+    /** A razão de ser da fase: beneficiar o insumo rende mais que vendê-lo bruto. */
+    it('beneficiar rende mais ao tesouro que vender tudo in natura', () => {
+      const beneficiando = anoDe(BASE_STATE);
+      const vendendoBruto = anoDe(semBeneficiamento);
+
+      expect(beneficiando.totals.valueAddedCents).toBeGreaterThan(0);
+      expect(beneficiando.state.economy.treasuryCents).toBeGreaterThan(
+        vendendoBruto.state.economy.treasuryCents,
+      );
+    });
+
+    it('acumula o total produzido do bem cujo insumo o país tem', () => {
+      const aco = anoDe(BASE_STATE).state.productionLines.find((line) => line.good === 'STEEL');
+
+      expect(aco!.producedTotal).toBeGreaterThan(0n);
+    });
+
+    /** Uma linha sem depósito é estado normal: a decisão existe, o insumo não. */
+    it('não produz bem cujo insumo o país não tem', () => {
+      const combustivel = anoDe(BASE_STATE).state.productionLines.find(
+        (line) => line.good === 'FUEL',
+      );
+
+      expect(combustivel!.producedTotal).toBe(0n);
+    });
+
+    it('alocação zero não produz, não agrega e não polui a mais', () => {
+      const result = anoDe(semBeneficiamento);
+
+      expect(result.totals.produced).toBe(0);
+      expect(result.totals.valueAddedCents).toBe(0);
+      expect(result.state.productionLines).toEqual(semBeneficiamento.productionLines);
+      expect(result.state.emissions).toBeLessThan(anoDe(BASE_STATE).state.emissions);
+    });
+
+    /** O custo ambiental da decisão: processar polui mais que só extrair. */
+    it('beneficiar aumenta as emissões', () => {
+      expect(anoDe(BASE_STATE).state.emissions).toBeGreaterThan(
+        anoDe(semBeneficiamento).state.emissions,
+      );
+    });
+
+    /**
+     * O teto industrial é o que impede "coloque tudo em 100" de ser a resposta
+     * óbvia: sem capacidade, alocar mais não produz mais.
+     */
+    it('a capacidade industrial limita o quanto adianta alocar', () => {
+      const tudoNoMaximo: SimulationState = {
+        ...BASE_STATE,
+        extractionRate: 100,
+        productionLines: BASE_STATE.productionLines.map((line) => ({ ...line, allocation: 100 })),
+      };
+
+      const paisPobre = anoDe(tudoNoMaximo);
+
+      const paisDesenvolvido = simulateNation(
+        tudoNoMaximo,
+        { technology: 100, infrastructure: 100 },
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+
+      expect(paisDesenvolvido.totals.produced).toBeGreaterThan(paisPobre.totals.produced);
     });
   });
 });

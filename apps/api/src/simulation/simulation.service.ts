@@ -3,6 +3,7 @@ import type {
   EconomyState,
   Nation,
   PopulationState,
+  ProductionLine,
   ResourceDeposit,
   ResourceState,
 } from '../../generated/prisma/client';
@@ -15,6 +16,7 @@ export interface SimulatedNation {
   population: PopulationState;
   economy: EconomyState;
   resources: ResourceState & { deposits: ResourceDeposit[] };
+  production: ProductionLine[];
 }
 
 /**
@@ -35,7 +37,7 @@ export class SimulationService {
    * está offline, sem manter processo algum rodando (CLAUDE.md seção 26).
    */
   async advance(input: SimulatedNation, now: Date): Promise<SimulatedNation> {
-    const { nation, population, economy, resources } = input;
+    const { nation, population, economy, resources, production } = input;
 
     const result = simulateNation(
       {
@@ -59,6 +61,12 @@ export class SimulationService {
           extractionCarryMicro: deposit.extractionCarryMicro,
         })),
         extractionRate: resources.extractionRate,
+        productionLines: production.map((line) => ({
+          good: line.good,
+          allocation: line.allocation,
+          producedTotal: line.producedTotal,
+          productionCarryMicro: line.productionCarryMicro,
+        })),
         happiness: nation.happiness,
         happinessCarryMicro: nation.happinessCarryMicro,
         emissions: nation.emissions,
@@ -75,28 +83,57 @@ export class SimulationService {
       return input;
     }
 
-    // Reencontra o id de cada depósito pelo tipo, que é único dentro de um país
-    // (`@@unique([resourceStateId, type])`). Casar por posição funcionaria hoje,
-    // mas passaria a gravar no depósito errado no dia em que o laço filtrasse ou
-    // reordenasse a lista.
-    const depositIdByType = new Map(
-      resources.deposits.map((deposit) => [deposit.type, deposit.id]),
+    // As listas (depósitos, linhas de produção) são casadas pelo que as torna
+    // únicas dentro do país — o tipo do recurso e o bem —, nunca pela posição:
+    // casar por índice passaria a gravar no registro errado no dia em que a
+    // simulação filtrasse ou reordenasse a lista.
+    //
+    // O novo estado de cada uma é montado aqui, e não lido de volta da
+    // transação: só o que se moveu é gravado, então a resposta do banco não
+    // corresponderia à lista inteira.
+    const updatedDeposits = resources.deposits.map((deposit) => {
+      const next = result.state.deposits.find((candidate) => candidate.type === deposit.type);
+
+      return next ? { ...deposit, ...next } : deposit;
+    });
+
+    const updatedProduction = production.map((line) => {
+      const next = result.state.productionLines.find((candidate) => candidate.good === line.good);
+
+      return next ? { ...line, ...next } : line;
+    });
+
+    const depositUpdates = updatedDeposits.map((deposit) =>
+      this.prisma.resourceDeposit.update({
+        where: { id: deposit.id },
+        data: {
+          reserves: deposit.reserves,
+          extractedTotal: deposit.extractedTotal,
+          extractionCarryMicro: deposit.extractionCarryMicro,
+        },
+      }),
     );
 
-    const depositUpdates = result.state.deposits.flatMap((deposit) => {
-      const id = depositIdByType.get(deposit.type);
+    const productionUpdates = updatedProduction.flatMap((line, index) => {
+      const before = production[index]!;
 
-      if (!id) {
+      // Linha parada (alocação zero, ou sem o insumo) não muda nada — gravar
+      // mesmo assim gastaria um UPDATE por leitura e mentiria no `updatedAt`.
+      // Os depósitos não precisam do mesmo cuidado: com extração parada eles
+      // também não mudam, mas a lista costuma ser curta e sempre ativa.
+      if (
+        before.producedTotal === line.producedTotal &&
+        before.productionCarryMicro === line.productionCarryMicro
+      ) {
         return [];
       }
 
       return [
-        this.prisma.resourceDeposit.update({
-          where: { id },
+        this.prisma.productionLine.update({
+          where: { id: line.id },
           data: {
-            reserves: deposit.reserves,
-            extractedTotal: deposit.extractedTotal,
-            extractionCarryMicro: deposit.extractionCarryMicro,
+            producedTotal: line.producedTotal,
+            productionCarryMicro: line.productionCarryMicro,
           },
         }),
       ];
@@ -105,40 +142,41 @@ export class SimulationService {
     // Transação: todos os registros descrevem o mesmo instante da simulação.
     // Gravar só parte deles deixaria o país com a população de um momento e o
     // tesouro de outro — e o marco temporal decidiria qual dos dois se perde.
-    const [updatedNation, updatedPopulation, updatedEconomy, ...updatedDeposits] =
-      await this.prisma.$transaction([
-        this.prisma.nation.update({
-          where: { id: nation.id },
-          data: {
-            happiness: result.state.happiness,
-            happinessCarryMicro: result.state.happinessCarryMicro,
-            emissions: result.state.emissions,
-            emissionsCarryMicro: result.state.emissionsCarryMicro,
-            simulatedUntil: result.simulatedUntil,
-          },
-        }),
-        this.prisma.populationState.update({
-          where: { id: population.id },
-          data: {
-            total: result.state.population.total,
-            growthCarryMicro: result.state.population.growthCarryMicro,
-          },
-        }),
-        this.prisma.economyState.update({
-          where: { id: economy.id },
-          data: {
-            treasuryCents: result.state.economy.treasuryCents,
-            treasuryCarryMicro: result.state.economy.treasuryCarryMicro,
-          },
-        }),
-        ...depositUpdates,
-      ]);
+    const [updatedNation, updatedPopulation, updatedEconomy] = await this.prisma.$transaction([
+      this.prisma.nation.update({
+        where: { id: nation.id },
+        data: {
+          happiness: result.state.happiness,
+          happinessCarryMicro: result.state.happinessCarryMicro,
+          emissions: result.state.emissions,
+          emissionsCarryMicro: result.state.emissionsCarryMicro,
+          simulatedUntil: result.simulatedUntil,
+        },
+      }),
+      this.prisma.populationState.update({
+        where: { id: population.id },
+        data: {
+          total: result.state.population.total,
+          growthCarryMicro: result.state.population.growthCarryMicro,
+        },
+      }),
+      this.prisma.economyState.update({
+        where: { id: economy.id },
+        data: {
+          treasuryCents: result.state.economy.treasuryCents,
+          treasuryCarryMicro: result.state.economy.treasuryCarryMicro,
+        },
+      }),
+      ...depositUpdates,
+      ...productionUpdates,
+    ]);
 
     return {
       nation: updatedNation,
       population: updatedPopulation,
       economy: updatedEconomy,
       resources: { ...resources, deposits: updatedDeposits },
+      production: updatedProduction,
     };
   }
 }

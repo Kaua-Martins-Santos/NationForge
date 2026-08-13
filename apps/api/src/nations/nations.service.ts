@@ -1,8 +1,10 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Nation } from '../../generated/prisma/client';
+import type { GoodType } from '../../generated/prisma/enums';
 import { EconomyService } from '../economy/economy.service';
 import { PopulationService } from '../population/population.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProductionService } from '../production/production.service';
 import { ResourcesService } from '../resources/resources.service';
 import { SimulationService, type SimulatedNation } from '../simulation/simulation.service';
 import type { CreateNationDto } from './dto/create-nation.dto';
@@ -15,6 +17,7 @@ export class NationsService {
     private readonly populationService: PopulationService,
     private readonly economyService: EconomyService,
     private readonly resourcesService: ResourcesService,
+    private readonly productionService: ProductionService,
     private readonly simulationService: SimulationService,
   ) {}
 
@@ -45,6 +48,7 @@ export class NationsService {
         populationState: true,
         economyState: true,
         resourceState: { include: { deposits: true } },
+        productionLines: true,
       },
     });
 
@@ -63,6 +67,7 @@ export class NationsService {
       population: nation.populationState,
       economy: nation.economyState,
       resources: nation.resourceState,
+      production: nation.productionLines,
     };
   }
 
@@ -120,6 +125,37 @@ export class NationsService {
     return { ...current, resources: resourceState };
   }
 
+  /**
+   * Altera quanto de um insumo vai para a indústria.
+   *
+   * Simula antes de alterar, como as demais decisões: o período que já passou
+   * precisa ser fechado na alocação que de fato valeu nele.
+   *
+   * A linha é encontrada pelo par (país, bem), que é único — o cliente manda o
+   * bem, nunca o id da linha, para não haver como tentar alterar a produção de
+   * outro jogador.
+   */
+  async setProductionAllocation(
+    userId: string,
+    good: GoodType,
+    allocation: number,
+    now: Date,
+  ): Promise<SimulatedNation> {
+    const current = await this.findCurrentStateOrFail(userId, now);
+
+    await this.prisma.productionLine.update({
+      where: { nationId_good: { nationId: current.nation.id, good } },
+      data: { allocation },
+    });
+
+    return {
+      ...current,
+      production: current.production.map((line) =>
+        line.good === good ? { ...line, allocation } : line,
+      ),
+    };
+  }
+
   async create(userId: string, dto: CreateNationDto, now: Date): Promise<SimulatedNation> {
     const existingNation = await this.findByUserId(userId);
     if (existingNation) {
@@ -150,11 +186,13 @@ export class NationsService {
         populationState: { create: this.populationService.buildInitialState() },
         economyState: { create: this.economyService.buildInitialState() },
         resourceState: { create: this.resourcesService.buildInitialState() },
+        productionLines: { create: this.productionService.buildInitialLines() },
       },
       include: {
         populationState: true,
         economyState: true,
         resourceState: { include: { deposits: true } },
+        productionLines: true,
       },
     });
 
@@ -168,6 +206,7 @@ export class NationsService {
       population: nation.populationState,
       economy: nation.economyState,
       resources: nation.resourceState,
+      production: nation.productionLines,
     };
   }
 }

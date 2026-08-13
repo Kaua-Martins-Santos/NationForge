@@ -2,6 +2,7 @@ import type { GovernmentType } from '../../generated/prisma/enums';
 import { toPublicEconomy, type PublicEconomy } from '../economy/public-economy';
 import { employedFrom } from '../population/population-growth';
 import { toPublicPopulation, type PublicPopulation } from '../population/public-population';
+import { toPublicProduction, type PublicProduction } from '../production/public-production';
 import { toPublicResources, type PublicResources } from '../resources/public-resources';
 import type { SimulatedNation } from '../simulation/simulation.service';
 
@@ -36,6 +37,7 @@ export interface PublicNation {
   population: PublicPopulation;
   economy: PublicEconomy;
   resources: PublicResources;
+  production: PublicProduction;
   /** Até quando a simulação está aplicada — o "as of" de todos os números acima. */
   simulatedUntil: string;
 }
@@ -45,7 +47,10 @@ export function toPublicNation({
   population,
   economy,
   resources,
+  production,
 }: SimulatedNation): PublicNation {
+  const employed = employedFrom(population.total, population.education);
+
   return {
     id: nation.id,
     name: nation.name,
@@ -66,7 +71,7 @@ export function toPublicNation({
     // A economia precisa do contexto dos outros domínios porque o PIB é
     // derivado, não armazenado.
     economy: toPublicEconomy(economy, {
-      employed: employedFrom(population.total, population.education),
+      employed,
       population: population.total,
       technology: nation.technology,
       infrastructure: nation.infrastructure,
@@ -76,6 +81,15 @@ export function toPublicNation({
     resources: toPublicResources(resources, {
       technology: nation.technology,
       infrastructure: nation.infrastructure,
+    }),
+
+    // A produção cruza dois domínios: o insumo vem dos depósitos e a capacidade,
+    // dos trabalhadores. A projeção é montada aqui, onde os dois já estão à mão.
+    production: toPublicProduction(production, resources.deposits, {
+      employed,
+      technology: nation.technology,
+      infrastructure: nation.infrastructure,
+      extractionRate: resources.extractionRate,
     }),
 
     simulatedUntil: nation.simulatedUntil.toISOString(),

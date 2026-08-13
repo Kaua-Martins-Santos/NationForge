@@ -102,6 +102,7 @@ model Nation {
   populationState PopulationState?
   economyState    EconomyState?
   resourceState   ResourceState?
+  productionLines ProductionLine[]
 
   @@map("nations")
 }
@@ -259,4 +260,57 @@ model ResourceDeposit {
 
   @@unique([resourceStateId, type])
   @@map("resource_deposits")
+}
+
+/// Bens manufaturados — o domínio Produção (CLAUDE.md seção 16).
+///
+/// Diferente de `ResourceType`, que sai do solo, um bem é **fabricado** a partir
+/// de um recurso. A receita de cada um vive no catálogo do servidor
+/// (`good-catalog.ts`), como no catálogo de recursos.
+enum GoodType {
+  PLANKS
+  STEEL
+  FUEL
+}
+
+/// A decisão de produção do país para um bem.
+///
+/// ## Por que pendura direto em Nation
+///
+/// Os outros domínios têm um registro-cabeça (`ResourceState`) porque guardam
+/// algo do país inteiro — a intensidade de extração, a semente. Produção não tem
+/// equivalente: tudo que existe é a escolha por bem. Um `ProductionState` sem
+/// campo algum seria uma tabela só para imitar o formato dos vizinhos.
+///
+/// Toda nação nasce com uma linha por bem do catálogo, mesmo sem ter o insumo:
+/// a decisão continua existindo, e o comércio (Fase 23) pode trazer o insumo que
+/// falta sem precisar criar linha nenhuma.
+model ProductionLine {
+  id       String @id @default(uuid())
+  nationId String
+  nation   Nation @relation(fields: [nationId], references: [id], onDelete: Cascade)
+
+  good GoodType
+
+  /// Quanto do insumo extraído no tick é desviado para a fábrica, de 0 a 100.
+  ///
+  /// A decisão desta fase: o que é processado deixa de ser vendido bruto e volta
+  /// valendo mais — se houver capacidade industrial para processá-lo.
+  allocation Int
+
+  /// Total já produzido ao longo da história do país.
+  ///
+  /// Como o `extractedTotal` dos depósitos, não alimenta regra nenhuma: existe
+  /// para relatórios (Fase 21) e conquistas como "produza 100.000 toneladas de
+  /// aço" (seção 31).
+  producedTotal BigInt @default(0)
+
+  /// Resto fracionário da produção, em milionésimos de unidade.
+  productionCarryMicro Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([nationId, good])
+  @@map("production_lines")
 }

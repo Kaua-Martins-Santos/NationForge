@@ -418,7 +418,132 @@ describe('Nations (e2e)', () => {
       }
     });
   });
+
+  describe('produção', () => {
+    const productionOf = (body: unknown) =>
+      (body as { production: PublicProductionBody }).production;
+
+    const steelOf = (body: unknown) =>
+      productionOf(body).lines.find((line) => line.good === 'STEEL')!;
+
+    beforeAll(async () => {
+      // Garante o insumo da siderurgia em vez de torcer pelo sorteio da dotação:
+      // sem ferro, a linha de aço existe mas nunca produz, e os testes abaixo
+      // passariam sem exercitar nada.
+      const state = await prisma.resourceState.findFirst({
+        where: { nation: { name: nationName } },
+      });
+
+      await prisma.resourceDeposit.upsert({
+        where: { resourceStateId_type: { resourceStateId: state!.id, type: 'IRON' } },
+        update: { reserves: 50_000_000n },
+        create: { resourceStateId: state!.id, type: 'IRON', reserves: 50_000_000n },
+      });
+
+      await authenticated('patch', '/nations/me/extraction-rate')
+        .send({ extractionRate: 100 })
+        .expect(200);
+    });
+
+    it('o país nasce com uma linha por bem do catálogo', async () => {
+      const production = productionOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      expect(production.lines.length).toBeGreaterThanOrEqual(3);
+      expect(production.annualCapacity).toBeGreaterThan(0);
+
+      for (const line of production.lines) {
+        expect(line.label).toBeTruthy();
+        expect(line.inputLabel).toBeTruthy();
+      }
+    });
+
+    it('rejeita alocação fora de 0–100 e bem inexistente', async () => {
+      await authenticated('patch', '/nations/me/production')
+        .send({ good: 'STEEL', allocation: 101 })
+        .expect(400);
+      await authenticated('patch', '/nations/me/production')
+        .send({ good: 'STEEL', allocation: -1 })
+        .expect(400);
+      await authenticated('patch', '/nations/me/production')
+        .send({ good: 'ANTIMATERIA', allocation: 50 })
+        .expect(400);
+    });
+
+    it('rejeita campos que o jogador não escolhe', async () => {
+      await authenticated('patch', '/nations/me/production')
+        .send({ good: 'STEEL', allocation: 50, producedTotal: 999_999 })
+        .expect(400);
+    });
+
+    it('persiste a alocação e recalcula as projeções', async () => {
+      const resposta = await authenticated('patch', '/nations/me/production')
+        .send({ good: 'STEEL', allocation: 100 })
+        .expect(200);
+
+      const aco = steelOf(resposta.body);
+
+      expect(aco.allocation).toBe(100);
+      expect(aco.annualProduction).toBeGreaterThan(0);
+      // A razão de ser da fase: beneficiar rende mais que vender bruto.
+      expect(aco.annualValueAdded).toBeGreaterThan(0);
+
+      // E continua valendo na próxima leitura.
+      expect(steelOf((await authenticated('get', '/nations/me').expect(200)).body).allocation).toBe(
+        100,
+      );
+    });
+
+    it('a produção acumula ao longo do tempo offline', async () => {
+      const antes = steelOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      await rewindSimulation(90 * 24);
+
+      const depois = steelOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      expect(depois.producedTotal).toBeGreaterThan(antes.producedTotal);
+    });
+
+    /** O mesmo exploit que as demais decisões fecham, agora na produção. */
+    it('fecha o período na alocação que valeu nele, não na nova', async () => {
+      await authenticated('patch', '/nations/me/production')
+        .send({ good: 'STEEL', allocation: 0 })
+        .expect(200);
+
+      const antes = steelOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      await rewindSimulation(90 * 24);
+
+      const depois = steelOf(
+        (
+          await authenticated('patch', '/nations/me/production')
+            .send({ good: 'STEEL', allocation: 100 })
+            .expect(200)
+        ).body,
+      );
+
+      expect(depois.allocation).toBe(100);
+      // O período rodou com a fábrica parada: nada foi beneficiado nele.
+      expect(depois.producedTotal).toBe(antes.producedTotal);
+    });
+  });
 });
+
+interface PublicProductionBody {
+  annualCapacity: number;
+  annualDemand: number;
+  capacityUsage: number;
+  annualValueAdded: number;
+  lines: {
+    good: string;
+    label: string;
+    inputLabel: string;
+    allocation: number;
+    producedTotal: number;
+    annualProduction: number;
+    annualValueAdded: number;
+    hasInput: boolean;
+  }[];
+}
 
 interface PublicResourcesBody {
   extractionRate: number;

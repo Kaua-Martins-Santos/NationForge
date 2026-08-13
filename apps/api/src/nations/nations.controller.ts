@@ -3,6 +3,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/jwt.strategy';
 import { SetTaxRateDto } from '../economy/dto/set-tax-rate.dto';
+import { SetAllocationDto } from '../production/dto/set-allocation.dto';
 import { SetExtractionRateDto } from '../resources/dto/set-extraction-rate.dto';
 import { CreateNationDto } from './dto/create-nation.dto';
 import { NationsService } from './nations.service';
@@ -67,6 +68,28 @@ export class NationsController {
       await this.nationsService.setExtractionRate(
         currentUser.userId,
         dto.extractionRate,
+        new Date(),
+      ),
+    );
+  }
+
+  /**
+   * A decisão do jogador sobre a produção (CLAUDE.md seção 16): vender o insumo
+   * bruto ou beneficiá-lo, se houver capacidade industrial para isso.
+   *
+   * Uma rota para todas as linhas, com o bem no corpo, em vez de uma rota por
+   * bem: adicionar um bem ao catálogo não deve exigir mexer no controller.
+   */
+  @Patch('me/production')
+  async setProductionAllocation(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: SetAllocationDto,
+  ): Promise<PublicNation> {
+    return toPublicNation(
+      await this.nationsService.setProductionAllocation(
+        currentUser.userId,
+        dto.good,
+        dto.allocation,
         new Date(),
       ),
     );

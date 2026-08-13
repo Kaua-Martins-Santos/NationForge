@@ -19,16 +19,19 @@
  *
  * 1. **População**, usando a felicidade do início do tick.
  * 2. **Extração**, que consome reservas e gera receita.
- * 3. **Economia**, usando a população já atualizada e a receita da extração —
- *    que entra no tesouro no mesmo tick em que saiu do solo.
- * 4. **Felicidade**, movida pela carga tributária, valendo para o tick seguinte.
- * 5. **Emissões**, acumuladas pelo que foi extraído.
+ * 3. **Produção**, que desvia parte do que foi extraído para a indústria — só o
+ *    que saiu do solo neste tick, nunca a reserva.
+ * 4. **Economia**, usando a população já atualizada, a receita da extração e o
+ *    ganho da produção — tudo entra no tesouro no mesmo tick em que aconteceu.
+ * 5. **Felicidade**, movida pela carga tributária, valendo para o tick seguinte.
+ * 6. **Emissões**, acumuladas pelo que foi extraído e pelo que foi processado.
  *
  * A ordem é fixa e documentada porque ela é parte da regra: mudá-la muda os
  * números. O que ela garante é que nenhum domínio enxergue um estado "do meio"
  * de outro — cada um lê um estado completo e coerente.
  */
 
+import type { ResourceType } from '../../generated/prisma/enums';
 import {
   applyEconomyTick,
   type EconomySnapshot,
@@ -40,6 +43,11 @@ import {
   type PopulationSnapshot,
   type PopulationTickDelta,
 } from '../population/population-growth';
+import {
+  applyProductionTick,
+  type ProductionLineSnapshot,
+  type ProductionTickResult,
+} from '../production/production-calculations';
 import {
   applyDepositTick,
   type DepositSnapshot,
@@ -60,6 +68,9 @@ export interface SimulationState {
 
   /** Intensidade de extração escolhida pelo jogador, 0 a 100. */
   extractionRate: number;
+
+  /** Linhas de produção do país, uma por bem do catálogo. */
+  productionLines: ProductionLineSnapshot[];
 
   /** Índice de 0 a 100, movido pela economia e lido pela migração. */
   happiness: number;
@@ -95,6 +106,10 @@ export interface SimulationTotals {
   /** Receita líquida da extração, já sem o custo de operação. */
   resourceRevenueCents: number;
   extracted: number;
+  /** Ganho da produção sobre vender o insumo bruto. */
+  valueAddedCents: number;
+  /** Unidades de bens fabricadas. */
+  produced: number;
   emissions: number;
 }
 
@@ -116,6 +131,8 @@ function emptyTotals(): SimulationTotals {
     happinessDelta: 0,
     resourceRevenueCents: 0,
     extracted: 0,
+    valueAddedCents: 0,
+    produced: 0,
     emissions: 0,
   };
 }
@@ -125,6 +142,7 @@ function accumulate(
   population: PopulationTickDelta,
   economy: EconomyTickDelta,
   extraction: ExtractionTickResult,
+  production: ProductionTickResult,
 ): void {
   totals.births += population.births;
   totals.deaths += population.deaths;
@@ -134,13 +152,22 @@ function accumulate(
   totals.happinessDelta += economy.happinessDelta;
   totals.resourceRevenueCents += extraction.netRevenueCents;
   totals.extracted += extraction.extracted;
-  totals.emissions += extraction.emissions;
+  totals.valueAddedCents += production.valueAddedCents;
+  totals.produced += production.produced;
+  totals.emissions += extraction.emissions + production.emissions;
 }
 
 interface ExtractionTickResult {
   deposits: DepositSnapshot[];
   /** Receita já líquida do custo de operação. */
   netRevenueCents: number;
+  /**
+   * Unidades extraídas por recurso neste tick.
+   *
+   * É o que a produção pode desviar: o fluxo do tick, nunca a reserva. Sai daqui
+   * como mapa porque quem consome procura por tipo, não percorre a lista.
+   */
+  output: Map<ResourceType, number>;
   extracted: number;
   emissions: number;
 }
@@ -151,6 +178,7 @@ function extractionTick(
   context: ExtractionContext,
 ): ExtractionTickResult {
   const next: DepositSnapshot[] = [];
+  const output = new Map<ResourceType, number>();
   let netRevenueCents = 0;
   let extracted = 0;
   let emissions = 0;
@@ -159,12 +187,13 @@ function extractionTick(
     const result = applyDepositTick(deposit, context);
 
     next.push(result.deposit);
+    output.set(result.delta.type, result.delta.extracted);
     netRevenueCents += result.delta.revenueCents - result.delta.operatingCostCents;
     extracted += result.delta.extracted;
     emissions += result.delta.emissions;
   }
 
-  return { deposits: next, netRevenueCents, extracted, emissions };
+  return { deposits: next, output, netRevenueCents, extracted, emissions };
 }
 
 /**
@@ -242,14 +271,24 @@ export function simulateNation(
       infrastructure: constants.infrastructure,
     });
 
+    const employed = employedFrom(population.snapshot.total, population.snapshot.education);
+
+    const production = applyProductionTick(current.productionLines, extraction.output, {
+      employed,
+      technology: constants.technology,
+      infrastructure: constants.infrastructure,
+    });
+
     const economy = applyEconomyTick(current.economy, {
-      employed: employedFrom(population.snapshot.total, population.snapshot.education),
+      employed,
       population: population.snapshot.total,
       technology: constants.technology,
       infrastructure: constants.infrastructure,
       education: population.snapshot.education,
-      // A extração deste tick entra no tesouro deste tick, não do próximo.
-      externalRevenueCents: extraction.netRevenueCents,
+      // A extração deste tick entra no tesouro deste tick, não do próximo. A
+      // produção entra apenas com o que agregou: a venda do insumo bruto já está
+      // contada na receita da extração.
+      externalRevenueCents: extraction.netRevenueCents + production.valueAddedCents,
     });
 
     const happiness = applyHappiness(
@@ -261,7 +300,7 @@ export function simulateNation(
     const emissions = applyEmissions(
       current.emissions,
       current.emissionsCarryMicro,
-      extraction.emissions,
+      extraction.emissions + production.emissions,
     );
 
     current = {
@@ -269,13 +308,14 @@ export function simulateNation(
       economy: economy.snapshot,
       deposits: extraction.deposits,
       extractionRate: current.extractionRate,
+      productionLines: production.lines,
       happiness: happiness.happiness,
       happinessCarryMicro: happiness.carryMicro,
       emissions: emissions.emissions,
       emissionsCarryMicro: emissions.carryMicro,
     };
 
-    accumulate(totals, population.delta, economy.delta, extraction);
+    accumulate(totals, population.delta, economy.delta, extraction, production);
   }
 
   return {
