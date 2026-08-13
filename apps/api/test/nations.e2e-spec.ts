@@ -526,7 +526,110 @@ describe('Nations (e2e)', () => {
       expect(depois.producedTotal).toBe(antes.producedTotal);
     });
   });
+
+  describe('agricultura', () => {
+    const agricultureOf = (body: unknown) =>
+      (body as { agriculture: PublicAgricultureBody }).agriculture;
+
+    it('o país nasce com lavoura, estoque e um clima', async () => {
+      const agriculture = agricultureOf(
+        (await authenticated('get', '/nations/me').expect(200)).body,
+      );
+
+      expect(agriculture.farmlandArea).toBeGreaterThan(0);
+      expect(agriculture.foodStock).toBeGreaterThan(0);
+      expect(agriculture.annualConsumption).toBeGreaterThan(0);
+      expect(agriculture.weatherLabel).toBeTruthy();
+      // Meio ano de reserva é o que o país recebe ao nascer.
+      expect(agriculture.stockDays).toBeGreaterThan(100);
+    });
+
+    /** Quem soubesse a semente saberia cada seca do calendário. */
+    it('não expõe a semente do clima', async () => {
+      const body = (await authenticated('get', '/nations/me').expect(200)).body as {
+        agriculture: Record<string, unknown>;
+      };
+
+      expect(body.agriculture).not.toHaveProperty('weatherSeed');
+      expect(body.agriculture).not.toHaveProperty('foodCarryMicro');
+    });
+
+    it('rejeita área fora de 0–100', async () => {
+      await authenticated('patch', '/nations/me/farmland').send({ farmlandShare: 101 }).expect(400);
+      await authenticated('patch', '/nations/me/farmland').send({ farmlandShare: -1 }).expect(400);
+    });
+
+    it('rejeita campos que o jogador não escolhe', async () => {
+      await authenticated('patch', '/nations/me/farmland')
+        .send({ farmlandShare: 50, foodStock: 999_999 })
+        .expect(400);
+    });
+
+    it('persiste a área e recalcula as projeções', async () => {
+      const antes = agricultureOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      const depois = agricultureOf(
+        (
+          await authenticated('patch', '/nations/me/farmland')
+            .send({ farmlandShare: 60 })
+            .expect(200)
+        ).body,
+      );
+
+      expect(depois.farmlandShare).toBe(60);
+      expect(depois.annualProduction).toBeGreaterThan(antes.annualProduction);
+      expect(depois.annualCost).toBeGreaterThan(antes.annualCost);
+
+      expect(
+        agricultureOf((await authenticated('get', '/nations/me').expect(200)).body).farmlandShare,
+      ).toBe(60);
+    });
+
+    it('o estoque acompanha a colheita ao longo do tempo offline', async () => {
+      const antes = agricultureOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      await rewindSimulation(60 * 24);
+
+      const depois = agricultureOf((await authenticated('get', '/nations/me').expect(200)).body);
+
+      // Com 60% do território plantado o país produz bem mais do que come.
+      expect(depois.foodStock).toBeGreaterThan(antes.foodStock);
+    });
+
+    /** A consequência da fase, ponta a ponta: sem lavoura o país passa fome. */
+    it('sem lavoura o estoque acaba e a felicidade cai', async () => {
+      await authenticated('patch', '/nations/me/farmland').send({ farmlandShare: 0 }).expect(200);
+
+      const antes = (await authenticated('get', '/nations/me').expect(200)).body as {
+        happiness: number;
+      };
+
+      // Tempo suficiente para queimar o estoque e passar fome depois.
+      await rewindSimulation(360 * 24);
+
+      const depois = (await authenticated('get', '/nations/me').expect(200)).body as {
+        happiness: number;
+        agriculture: PublicAgricultureBody;
+      };
+
+      expect(depois.agriculture.foodStock).toBe(0);
+      expect(depois.happiness).toBeLessThan(antes.happiness);
+    });
+  });
 });
+
+interface PublicAgricultureBody {
+  farmlandShare: number;
+  farmlandArea: number;
+  foodStock: number;
+  stockDays: number;
+  annualProduction: number;
+  annualConsumption: number;
+  annualBalance: number;
+  annualCost: number;
+  weather: number;
+  weatherLabel: string;
+}
 
 interface PublicProductionBody {
   annualCapacity: number;

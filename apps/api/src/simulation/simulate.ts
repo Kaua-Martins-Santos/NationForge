@@ -21,10 +21,14 @@
  * 2. **Extração**, que consome reservas e gera receita.
  * 3. **Produção**, que desvia parte do que foi extraído para a indústria — só o
  *    que saiu do solo neste tick, nunca a reserva.
- * 4. **Economia**, usando a população já atualizada, a receita da extração e o
- *    ganho da produção — tudo entra no tesouro no mesmo tick em que aconteceu.
- * 5. **Felicidade**, movida pela carga tributária, valendo para o tick seguinte.
- * 6. **Emissões**, acumuladas pelo que foi extraído e pelo que foi processado.
+ * 4. **Agricultura**, que colhe conforme o tempo e alimenta a população já
+ *    atualizada — quem nasceu neste tick come neste tick.
+ * 5. **Economia**, usando a população já atualizada, a receita da extração, o
+ *    ganho da produção e o custo da lavoura — tudo no mesmo tick em que
+ *    aconteceu.
+ * 6. **Felicidade**, movida pela carga tributária e pela fome, valendo para o
+ *    tick seguinte.
+ * 7. **Emissões**, acumuladas pelo que foi extraído, processado e plantado.
  *
  * A ordem é fixa e documentada porque ela é parte da regra: mudá-la muda os
  * números. O que ela garante é que nenhum domínio enxergue um estado "do meio"
@@ -32,6 +36,12 @@
  */
 
 import type { ResourceType } from '../../generated/prisma/enums';
+import {
+  applyAgricultureTick,
+  type AgricultureSnapshot,
+  type AgricultureTickDelta,
+} from '../agriculture/agriculture-calculations';
+import { tickIndexOf } from '../agriculture/weather';
 import {
   applyEconomyTick,
   type EconomySnapshot,
@@ -72,6 +82,9 @@ export interface SimulationState {
   /** Linhas de produção do país, uma por bem do catálogo. */
   productionLines: ProductionLineSnapshot[];
 
+  /** Lavoura, estoque de comida e semente do clima. */
+  agriculture: AgricultureSnapshot;
+
   /** Índice de 0 a 100, movido pela economia e lido pela migração. */
   happiness: number;
 
@@ -93,6 +106,8 @@ export interface SimulationState {
 export interface SimulationConstants {
   technology: number;
   infrastructure: number;
+  /** Em km²: o teto do que pode virar lavoura. */
+  territory: number;
 }
 
 /** Soma do que aconteceu no período, para relatórios explicarem a mudança. */
@@ -110,6 +125,16 @@ export interface SimulationTotals {
   valueAddedCents: number;
   /** Unidades de bens fabricadas. */
   produced: number;
+  /** Alimento colhido e comido no período, em toneladas. */
+  foodProduced: number;
+  foodConsumed: number;
+  /**
+   * Ticks em que faltou comida.
+   *
+   * Contagem, e não média: um relatório precisa poder dizer "houve fome durante
+   * 30 horas", e uma média diluiria uma crise curta em um período longo.
+   */
+  hungryTicks: number;
   emissions: number;
 }
 
@@ -133,6 +158,9 @@ function emptyTotals(): SimulationTotals {
     extracted: 0,
     valueAddedCents: 0,
     produced: 0,
+    foodProduced: 0,
+    foodConsumed: 0,
+    hungryTicks: 0,
     emissions: 0,
   };
 }
@@ -143,18 +171,22 @@ function accumulate(
   economy: EconomyTickDelta,
   extraction: ExtractionTickResult,
   production: ProductionTickResult,
+  agriculture: AgricultureTickDelta,
 ): void {
   totals.births += population.births;
   totals.deaths += population.deaths;
   totals.migration += population.migration;
   totals.revenueCents += economy.revenueCents;
   totals.expensesCents += economy.expensesCents;
-  totals.happinessDelta += economy.happinessDelta;
+  totals.happinessDelta += economy.happinessDelta + agriculture.happinessDelta;
   totals.resourceRevenueCents += extraction.netRevenueCents;
   totals.extracted += extraction.extracted;
   totals.valueAddedCents += production.valueAddedCents;
   totals.produced += production.produced;
-  totals.emissions += extraction.emissions + production.emissions;
+  totals.foodProduced += agriculture.produced;
+  totals.foodConsumed += agriculture.consumed;
+  totals.hungryTicks += agriculture.shortage > 0 ? 1 : 0;
+  totals.emissions += extraction.emissions + production.emissions + agriculture.emissions;
 }
 
 interface ExtractionTickResult {
@@ -262,6 +294,11 @@ export function simulateNation(
   let current = state;
   const totals = emptyTotals();
 
+  // O clima é indexado pelo instante do calendário, não pela posição dentro
+  // deste laço: é o que faz a mesma hora ter o mesmo tempo, seja ela alcançada
+  // por uma leitura de agora ou por um catch-up de um ano.
+  const firstTickIndex = tickIndexOf(simulatedUntil);
+
   for (let tick = 0; tick < appliedTicks; tick += 1) {
     const population = applyPopulationTick(current.population, { happiness: current.happiness });
 
@@ -279,6 +316,13 @@ export function simulateNation(
       infrastructure: constants.infrastructure,
     });
 
+    const agriculture = applyAgricultureTick(current.agriculture, {
+      population: population.snapshot.total,
+      territory: constants.territory,
+      technology: constants.technology,
+      tickIndex: firstTickIndex + tick,
+    });
+
     const economy = applyEconomyTick(current.economy, {
       employed,
       population: population.snapshot.total,
@@ -289,18 +333,21 @@ export function simulateNation(
       // produção entra apenas com o que agregou: a venda do insumo bruto já está
       // contada na receita da extração.
       externalRevenueCents: extraction.netRevenueCents + production.valueAddedCents,
+      externalExpensesCents: agriculture.delta.costCents,
     });
 
+    // Imposto e fome empurram a felicidade juntos: quem aplica é o orquestrador
+    // porque felicidade é atributo da nação, não de um domínio.
     const happiness = applyHappiness(
       current.happiness,
       current.happinessCarryMicro,
-      economy.delta.happinessDelta,
+      economy.delta.happinessDelta + agriculture.delta.happinessDelta,
     );
 
     const emissions = applyEmissions(
       current.emissions,
       current.emissionsCarryMicro,
-      extraction.emissions + production.emissions,
+      extraction.emissions + production.emissions + agriculture.delta.emissions,
     );
 
     current = {
@@ -309,13 +356,14 @@ export function simulateNation(
       deposits: extraction.deposits,
       extractionRate: current.extractionRate,
       productionLines: production.lines,
+      agriculture: agriculture.snapshot,
       happiness: happiness.happiness,
       happinessCarryMicro: happiness.carryMicro,
       emissions: emissions.emissions,
       emissionsCarryMicro: emissions.carryMicro,
     };
 
-    accumulate(totals, population.delta, economy.delta, extraction, production);
+    accumulate(totals, population.delta, economy.delta, extraction, production, agriculture.delta);
   }
 
   return {

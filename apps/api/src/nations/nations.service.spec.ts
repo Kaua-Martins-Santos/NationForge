@@ -1,5 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { AGRICULTURE_DEFAULTS } from '../agriculture/agriculture-defaults';
+import { AgricultureService } from '../agriculture/agriculture.service';
 import { ECONOMY_DEFAULTS } from '../economy/economy-defaults';
 import { EconomyService } from '../economy/economy.service';
 import { POPULATION_DEFAULTS } from '../population/population-defaults';
@@ -44,6 +46,7 @@ describe('NationsService', () => {
         EconomyService,
         ResourcesService,
         ProductionService,
+        AgricultureService,
         SimulationService,
         { provide: PrismaService, useValue: prisma },
       ],
@@ -72,6 +75,7 @@ describe('NationsService', () => {
           economyState: { id: 'eco-1' },
           resourceState: { id: 'res-1', deposits: [] },
           productionLines: [],
+          agricultureState: { id: 'agr-1' },
         }),
       );
     }
@@ -115,6 +119,9 @@ describe('NationsService', () => {
           };
         };
         productionLines: { create: { good: string; allocation: number }[] };
+        agricultureState: {
+          create: { farmlandShare: number; foodStock: bigint; weatherSeed: number };
+        };
       };
 
       // Escrita aninhada = uma transação: um país sem seus domínios seria inválido.
@@ -138,6 +145,14 @@ describe('NationsService', () => {
       // insumo o país não sorteou — a decisão existe antes do insumo.
       expect(data.productionLines.create).toHaveLength(GOOD_ORDER.length);
       expect(data.productionLines.create[0]!.allocation).toBe(PRODUCTION_DEFAULTS.allocation);
+
+      expect(data.agricultureState.create).toMatchObject({
+        farmlandShare: AGRICULTURE_DEFAULTS.farmlandShare,
+        foodStock: AGRICULTURE_DEFAULTS.foodStock,
+      });
+
+      // A semente do clima é sorteada pelo servidor, como a da dotação natural.
+      expect(data.agricultureState.create.weatherSeed).toEqual(expect.any(Number));
     });
 
     it('ignora atributos de jogo enviados pelo cliente', async () => {

@@ -99,10 +99,11 @@ model Nation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  populationState PopulationState?
-  economyState    EconomyState?
-  resourceState   ResourceState?
-  productionLines ProductionLine[]
+  populationState  PopulationState?
+  economyState     EconomyState?
+  resourceState    ResourceState?
+  agricultureState AgricultureState?
+  productionLines  ProductionLine[]
 
   @@map("nations")
 }
@@ -260,6 +261,45 @@ model ResourceDeposit {
 
   @@unique([resourceStateId, type])
   @@map("resource_deposits")
+}
+
+/// Estado agrícola de um país — o domínio Agricultura (CLAUDE.md seção 15).
+///
+/// O primeiro domínio com estoque: comida é produzida, guardada e consumida
+/// todo tick, tenha havido safra ou não.
+model AgricultureState {
+  id       String @id @default(uuid())
+  nationId String @unique
+  nation   Nation @relation(fields: [nationId], references: [id], onDelete: Cascade)
+
+  /// Fração do território dedicada à lavoura, 0 a 100.
+  ///
+  /// A decisão desta fase: mais lavoura alimenta mais gente, custa mais
+  /// manutenção e emite mais.
+  farmlandShare Int
+
+  /// Alimento estocado, em toneladas.
+  ///
+  /// BigInt como os demais acumuladores: um país grande com séculos de excedente
+  /// passaria do INTEGER do Postgres.
+  foodStock BigInt
+
+  /// Resto fracionário do estoque, em milionésimos de tonelada. Mesma técnica
+  /// dos demais `carry`, pelo mesmo motivo.
+  foodCarryMicro Int @default(0)
+
+  /// Semente do clima do país.
+  ///
+  /// Separada da semente da dotação natural de propósito: com uma semente só, o
+  /// mesmo número decidiria onde há petróleo e quando chove, e mexer em um
+  /// mudaria o outro sem razão. Não é exposta ao cliente — quem soubesse a
+  /// semente saberia cada seca do calendário.
+  weatherSeed Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("agriculture_states")
 }
 
 /// Bens manufaturados — o domínio Produção (CLAUDE.md seção 16).

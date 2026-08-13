@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import type { Nation } from '../../generated/prisma/client';
 import type { GoodType } from '../../generated/prisma/enums';
+import { AgricultureService } from '../agriculture/agriculture.service';
 import { EconomyService } from '../economy/economy.service';
 import { PopulationService } from '../population/population.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +19,7 @@ export class NationsService {
     private readonly economyService: EconomyService,
     private readonly resourcesService: ResourcesService,
     private readonly productionService: ProductionService,
+    private readonly agricultureService: AgricultureService,
     private readonly simulationService: SimulationService,
   ) {}
 
@@ -49,6 +51,7 @@ export class NationsService {
         economyState: true,
         resourceState: { include: { deposits: true } },
         productionLines: true,
+        agricultureState: true,
       },
     });
 
@@ -58,7 +61,12 @@ export class NationsService {
 
     // Todo país é criado junto dos seus domínios, na mesma transação — então a
     // ausência aqui significaria dado corrompido, não um caso normal.
-    if (!nation.populationState || !nation.economyState || !nation.resourceState) {
+    if (
+      !nation.populationState ||
+      !nation.economyState ||
+      !nation.resourceState ||
+      !nation.agricultureState
+    ) {
       throw new NotFoundException('Estado interno do país não encontrado.');
     }
 
@@ -68,6 +76,7 @@ export class NationsService {
       economy: nation.economyState,
       resources: nation.resourceState,
       production: nation.productionLines,
+      agriculture: nation.agricultureState,
     };
   }
 
@@ -156,6 +165,28 @@ export class NationsService {
     };
   }
 
+  /**
+   * Altera quanto do território é lavoura.
+   *
+   * Simula antes de alterar, como as demais decisões: quem passou o mês com
+   * pouca lavoura precisa ter passado fome no mês, não escapar dela plantando
+   * um instante antes da leitura.
+   */
+  async setFarmlandShare(
+    userId: string,
+    farmlandShare: number,
+    now: Date,
+  ): Promise<SimulatedNation> {
+    const current = await this.findCurrentStateOrFail(userId, now);
+
+    const agriculture = await this.prisma.agricultureState.update({
+      where: { id: current.agriculture.id },
+      data: { farmlandShare },
+    });
+
+    return { ...current, agriculture };
+  }
+
   async create(userId: string, dto: CreateNationDto, now: Date): Promise<SimulatedNation> {
     const existingNation = await this.findByUserId(userId);
     if (existingNation) {
@@ -187,17 +218,24 @@ export class NationsService {
         economyState: { create: this.economyService.buildInitialState() },
         resourceState: { create: this.resourcesService.buildInitialState() },
         productionLines: { create: this.productionService.buildInitialLines() },
+        agricultureState: { create: this.agricultureService.buildInitialState() },
       },
       include: {
         populationState: true,
         economyState: true,
         resourceState: { include: { deposits: true } },
         productionLines: true,
+        agricultureState: true,
       },
     });
 
     // O include garante os valores; o if existe para satisfazer o tipo.
-    if (!nation.populationState || !nation.economyState || !nation.resourceState) {
+    if (
+      !nation.populationState ||
+      !nation.economyState ||
+      !nation.resourceState ||
+      !nation.agricultureState
+    ) {
       throw new Error('Falha ao criar o estado interno do país.');
     }
 
@@ -207,6 +245,7 @@ export class NationsService {
       economy: nation.economyState,
       resources: nation.resourceState,
       production: nation.productionLines,
+      agriculture: nation.agricultureState,
     };
   }
 }

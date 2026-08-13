@@ -1,31 +1,5 @@
 import { RESOURCE_CATALOG, RESOURCE_ORDER } from './resource-catalog';
-import { createSeededRandom, generateEndowment } from './resource-endowment';
-
-describe('createSeededRandom', () => {
-  it('produz a mesma sequência para a mesma semente', () => {
-    const primeira = createSeededRandom(42);
-    const segunda = createSeededRandom(42);
-
-    for (let i = 0; i < 20; i += 1) {
-      expect(primeira()).toBe(segunda());
-    }
-  });
-
-  it('produz sequências diferentes para sementes diferentes', () => {
-    expect(createSeededRandom(1)()).not.toBe(createSeededRandom(2)());
-  });
-
-  it('fica sempre em [0, 1)', () => {
-    const random = createSeededRandom(7);
-
-    for (let i = 0; i < 500; i += 1) {
-      const value = random();
-
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThan(1);
-    }
-  });
-});
+import { generateEndowment } from './resource-endowment';
 
 describe('generateEndowment', () => {
   it('é determinístico: mesma semente, mesma dotação', () => {

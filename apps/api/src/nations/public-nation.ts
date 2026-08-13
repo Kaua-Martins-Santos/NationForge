@@ -1,4 +1,6 @@
 import type { GovernmentType } from '../../generated/prisma/enums';
+import { toPublicAgriculture, type PublicAgriculture } from '../agriculture/public-agriculture';
+import { tickIndexOf } from '../agriculture/weather';
 import { toPublicEconomy, type PublicEconomy } from '../economy/public-economy';
 import { employedFrom } from '../population/population-growth';
 import { toPublicPopulation, type PublicPopulation } from '../population/public-population';
@@ -38,6 +40,7 @@ export interface PublicNation {
   economy: PublicEconomy;
   resources: PublicResources;
   production: PublicProduction;
+  agriculture: PublicAgriculture;
   /** Até quando a simulação está aplicada — o "as of" de todos os números acima. */
   simulatedUntil: string;
 }
@@ -48,6 +51,7 @@ export function toPublicNation({
   economy,
   resources,
   production,
+  agriculture,
 }: SimulatedNation): PublicNation {
   const employed = employedFrom(population.total, population.education);
 
@@ -90,6 +94,15 @@ export function toPublicNation({
       technology: nation.technology,
       infrastructure: nation.infrastructure,
       extractionRate: resources.extractionRate,
+    }),
+
+    // O clima é o do último tick aplicado, não o de "agora": mostrar um tempo
+    // que a simulação ainda não viveu faria o painel divergir dos números.
+    agriculture: toPublicAgriculture(agriculture, {
+      population: population.total,
+      territory: nation.territory,
+      technology: nation.technology,
+      tickIndex: tickIndexOf(nation.simulatedUntil),
     }),
 
     simulatedUntil: nation.simulatedUntil.toISOString(),

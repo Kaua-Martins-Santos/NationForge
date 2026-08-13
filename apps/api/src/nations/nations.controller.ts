@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { SetFarmlandShareDto } from '../agriculture/dto/set-farmland-share.dto';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/jwt.strategy';
@@ -92,6 +93,20 @@ export class NationsController {
         dto.allocation,
         new Date(),
       ),
+    );
+  }
+
+  /**
+   * A decisão do jogador sobre a agricultura (CLAUDE.md seção 15): quanto do
+   * território virar lavoura — comida contra tesouro.
+   */
+  @Patch('me/farmland')
+  async setFarmlandShare(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Body() dto: SetFarmlandShareDto,
+  ): Promise<PublicNation> {
+    return toPublicNation(
+      await this.nationsService.setFarmlandShare(currentUser.userId, dto.farmlandShare, new Date()),
     );
   }
 }

@@ -1,4 +1,5 @@
 import type { ResourceType } from '../../generated/prisma/enums';
+import { createSeededRandom } from '../simulation/seeded-random';
 import { RESOURCE_CATALOG, RESOURCE_ORDER } from './resource-catalog';
 
 /**
@@ -26,28 +27,6 @@ const MIN_DEPOSITS = 3;
 export interface ResourceEndowment {
   type: ResourceType;
   reserves: bigint;
-}
-
-/**
- * Gerador pseudoaleatório com semente (mulberry32).
- *
- * Escrito à mão, e não vindo de uma dependência: são seis linhas, e um pacote
- * externo para isso seria a "tecnologia sem necessidade" que a seção 7 pede para
- * evitar. `Math.random()` não serviria — não aceita semente, então o resultado
- * não seria reproduzível.
- */
-export function createSeededRandom(seed: number): () => number {
-  let state = seed >>> 0;
-
-  return () => {
-    state = (state + 0x6d2b79f5) >>> 0;
-
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 /**

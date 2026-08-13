@@ -39,13 +39,19 @@ const BASE_STATE: SimulationState = {
     { good: 'STEEL', allocation: 30, producedTotal: 0n, productionCarryMicro: 0 },
     { good: 'FUEL', allocation: 30, producedTotal: 0n, productionCarryMicro: 0 },
   ],
+  agriculture: {
+    farmlandShare: 35,
+    foodStock: 250_000n,
+    foodCarryMicro: 0,
+    weatherSeed: 4_242,
+  },
   happiness: 60,
   happinessCarryMicro: 0,
   emissions: 0,
   emissionsCarryMicro: 0,
 };
 
-const CONSTANTS: SimulationConstants = { technology: 10, infrastructure: 10 };
+const CONSTANTS: SimulationConstants = { technology: 10, infrastructure: 10, territory: 100_000 };
 
 const START = new Date('2026-01-01T00:00:00.000Z');
 
@@ -274,7 +280,16 @@ describe('simulateNation', () => {
       expect(result.state.deposits).toEqual(BASE_STATE.deposits);
       expect(result.totals.extracted).toBe(0);
       expect(result.totals.resourceRevenueCents).toBe(0);
-      expect(result.state.emissions).toBe(0);
+
+      // O país ainda emite pela lavoura: o que desaparece é a poluição do solo.
+      const semNada = simulateNation(
+        { ...semExtracao, agriculture: { ...BASE_STATE.agriculture, farmlandShare: 0 } },
+        CONSTANTS,
+        START,
+        hoursAfterStart(TICKS_PER_YEAR),
+      );
+
+      expect(semNada.state.emissions).toBe(0);
     });
 
     it('quanto maior a intensidade, mais extração, receita e emissões', () => {
@@ -370,13 +385,13 @@ describe('simulateNation', () => {
     it('tecnologia e infraestrutura aumentam a extração', () => {
       const atrasado = simulateNation(
         BASE_STATE,
-        { technology: 0, infrastructure: 0 },
+        { ...CONSTANTS, technology: 0, infrastructure: 0 },
         START,
         hoursAfterStart(TICKS_PER_YEAR),
       );
       const avancado = simulateNation(
         BASE_STATE,
-        { technology: 100, infrastructure: 100 },
+        { ...CONSTANTS, technology: 100, infrastructure: 100 },
         START,
         hoursAfterStart(TICKS_PER_YEAR),
       );
@@ -451,12 +466,101 @@ describe('simulateNation', () => {
 
       const paisDesenvolvido = simulateNation(
         tudoNoMaximo,
-        { technology: 100, infrastructure: 100 },
+        { ...CONSTANTS, technology: 100, infrastructure: 100 },
         START,
         hoursAfterStart(TICKS_PER_YEAR),
       );
 
       expect(paisDesenvolvido.totals.produced).toBeGreaterThan(paisPobre.totals.produced);
+    });
+  });
+
+  describe('agricultura', () => {
+    const comLavoura = (share: number): SimulationState => ({
+      ...BASE_STATE,
+      agriculture: { ...BASE_STATE.agriculture, farmlandShare: share },
+    });
+
+    const anoDe = (state: SimulationState) =>
+      simulateNation(state, CONSTANTS, START, hoursAfterStart(TICKS_PER_YEAR));
+
+    it('planta, colhe e alimenta a população todo tick', () => {
+      const result = anoDe(BASE_STATE);
+
+      expect(result.totals.foodProduced).toBeGreaterThan(0);
+      expect(result.totals.foodConsumed).toBeGreaterThan(0);
+      expect(result.totals.hungryTicks).toBe(0);
+    });
+
+    it('a lavoura custa tesouro', () => {
+      const semLavoura = anoDe(comLavoura(0));
+      const comMuita = anoDe(comLavoura(80));
+
+      expect(comMuita.totals.expensesCents).toBeGreaterThan(semLavoura.totals.expensesCents);
+    });
+
+    /**
+     * A cadeia que fecha a fase: sem lavoura o estoque acaba, vem a fome, a
+     * felicidade despenca e o país perde gente para a emigração — a mesma
+     * migração que a Fase 10 implementou.
+     */
+    it('a fome derruba a felicidade e, com ela, a população', () => {
+      const faminto = anoDe(comLavoura(0));
+      const alimentado = anoDe(BASE_STATE);
+
+      expect(faminto.totals.hungryTicks).toBeGreaterThan(0);
+      expect(faminto.state.agriculture.foodStock).toBe(0n);
+      expect(faminto.state.happiness).toBeLessThan(alimentado.state.happiness);
+      expect(faminto.state.population.total).toBeLessThan(alimentado.state.population.total);
+    });
+
+    /** O estoque é justamente o que dá tempo de reagir antes da fome. */
+    it('o estoque segura o país por um bom tempo antes da primeira fome', () => {
+      const primeiroMes = simulateNation(comLavoura(0), CONSTANTS, START, hoursAfterStart(720));
+
+      expect(primeiroMes.totals.hungryTicks).toBe(0);
+      expect(primeiroMes.state.agriculture.foodStock).toBeLessThan(
+        BASE_STATE.agriculture.foodStock,
+      );
+    });
+
+    it('mais lavoura, mais comida e mais emissões', () => {
+      const pouca = anoDe(comLavoura(10));
+      const muita = anoDe(comLavoura(80));
+
+      expect(muita.totals.foodProduced).toBeGreaterThan(pouca.totals.foodProduced);
+      expect(muita.state.emissions).toBeGreaterThan(pouca.state.emissions);
+    });
+
+    /**
+     * O clima é função do instante do calendário, não da posição no laço — por
+     * isso o resultado não muda com o fatiamento. O teste geral de fatias já
+     * cobre isso; aqui garantimos que o clima de fato variou no período, senão
+     * aquele teste passaria com um clima constante.
+     */
+    it('a safra varia ao longo do ano sem quebrar o determinismo', () => {
+      const meses = Array.from(
+        { length: 12 },
+        (_, mes) =>
+          simulateNation(
+            BASE_STATE,
+            CONSTANTS,
+            hoursAfterStart(mes * 720),
+            hoursAfterStart((mes + 1) * 720),
+          ).totals.foodProduced,
+      );
+
+      expect(new Set(meses).size).toBe(12);
+      expect(Math.max(...meses)).toBeGreaterThan(Math.min(...meses) * 1.2);
+    });
+
+    it('países com sementes diferentes têm safras diferentes no mesmo período', () => {
+      const outro = anoDe({
+        ...BASE_STATE,
+        agriculture: { ...BASE_STATE.agriculture, weatherSeed: 999 },
+      });
+
+      expect(outro.totals.foodProduced).not.toBe(anoDe(BASE_STATE).totals.foodProduced);
     });
   });
 });

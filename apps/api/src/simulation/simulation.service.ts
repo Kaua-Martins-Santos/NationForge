@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  AgricultureState,
   EconomyState,
   Nation,
   PopulationState,
@@ -17,6 +18,7 @@ export interface SimulatedNation {
   economy: EconomyState;
   resources: ResourceState & { deposits: ResourceDeposit[] };
   production: ProductionLine[];
+  agriculture: AgricultureState;
 }
 
 /**
@@ -37,7 +39,7 @@ export class SimulationService {
    * está offline, sem manter processo algum rodando (CLAUDE.md seção 26).
    */
   async advance(input: SimulatedNation, now: Date): Promise<SimulatedNation> {
-    const { nation, population, economy, resources, production } = input;
+    const { nation, population, economy, resources, production, agriculture } = input;
 
     const result = simulateNation(
       {
@@ -67,12 +69,22 @@ export class SimulationService {
           producedTotal: line.producedTotal,
           productionCarryMicro: line.productionCarryMicro,
         })),
+        agriculture: {
+          farmlandShare: agriculture.farmlandShare,
+          foodStock: agriculture.foodStock,
+          foodCarryMicro: agriculture.foodCarryMicro,
+          weatherSeed: agriculture.weatherSeed,
+        },
         happiness: nation.happiness,
         happinessCarryMicro: nation.happinessCarryMicro,
         emissions: nation.emissions,
         emissionsCarryMicro: nation.emissionsCarryMicro,
       },
-      { technology: nation.technology, infrastructure: nation.infrastructure },
+      {
+        technology: nation.technology,
+        infrastructure: nation.infrastructure,
+        territory: nation.territory,
+      },
       nation.simulatedUntil,
       now,
     );
@@ -142,34 +154,42 @@ export class SimulationService {
     // Transação: todos os registros descrevem o mesmo instante da simulação.
     // Gravar só parte deles deixaria o país com a população de um momento e o
     // tesouro de outro — e o marco temporal decidiria qual dos dois se perde.
-    const [updatedNation, updatedPopulation, updatedEconomy] = await this.prisma.$transaction([
-      this.prisma.nation.update({
-        where: { id: nation.id },
-        data: {
-          happiness: result.state.happiness,
-          happinessCarryMicro: result.state.happinessCarryMicro,
-          emissions: result.state.emissions,
-          emissionsCarryMicro: result.state.emissionsCarryMicro,
-          simulatedUntil: result.simulatedUntil,
-        },
-      }),
-      this.prisma.populationState.update({
-        where: { id: population.id },
-        data: {
-          total: result.state.population.total,
-          growthCarryMicro: result.state.population.growthCarryMicro,
-        },
-      }),
-      this.prisma.economyState.update({
-        where: { id: economy.id },
-        data: {
-          treasuryCents: result.state.economy.treasuryCents,
-          treasuryCarryMicro: result.state.economy.treasuryCarryMicro,
-        },
-      }),
-      ...depositUpdates,
-      ...productionUpdates,
-    ]);
+    const [updatedNation, updatedPopulation, updatedEconomy, updatedAgriculture] =
+      await this.prisma.$transaction([
+        this.prisma.nation.update({
+          where: { id: nation.id },
+          data: {
+            happiness: result.state.happiness,
+            happinessCarryMicro: result.state.happinessCarryMicro,
+            emissions: result.state.emissions,
+            emissionsCarryMicro: result.state.emissionsCarryMicro,
+            simulatedUntil: result.simulatedUntil,
+          },
+        }),
+        this.prisma.populationState.update({
+          where: { id: population.id },
+          data: {
+            total: result.state.population.total,
+            growthCarryMicro: result.state.population.growthCarryMicro,
+          },
+        }),
+        this.prisma.economyState.update({
+          where: { id: economy.id },
+          data: {
+            treasuryCents: result.state.economy.treasuryCents,
+            treasuryCarryMicro: result.state.economy.treasuryCarryMicro,
+          },
+        }),
+        this.prisma.agricultureState.update({
+          where: { id: agriculture.id },
+          data: {
+            foodStock: result.state.agriculture.foodStock,
+            foodCarryMicro: result.state.agriculture.foodCarryMicro,
+          },
+        }),
+        ...depositUpdates,
+        ...productionUpdates,
+      ]);
 
     return {
       nation: updatedNation,
@@ -177,6 +197,7 @@ export class SimulationService {
       economy: updatedEconomy,
       resources: { ...resources, deposits: updatedDeposits },
       production: updatedProduction,
+      agriculture: updatedAgriculture,
     };
   }
 }

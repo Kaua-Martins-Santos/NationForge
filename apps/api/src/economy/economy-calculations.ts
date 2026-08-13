@@ -105,6 +105,15 @@ export interface EconomyContext {
    * deixaria de fechar.
    */
   externalRevenueCents?: number;
+
+  /**
+   * Despesa de outros domínios que sai do tesouro neste tick, em centavos.
+   *
+   * Hoje é a manutenção da lavoura. Chega por aqui pelo mesmo motivo que a
+   * receita: o tesouro tem um dono só, e cada domínio descontando por fora
+   * precisaria da sua própria aritmética de resto acumulado.
+   */
+  externalExpensesCents?: number;
 }
 
 /** O que aconteceu com o dinheiro em um tick, em centavos. */
@@ -185,7 +194,9 @@ export function applyEconomyTick(
 ): { snapshot: EconomySnapshot; delta: EconomyTickDelta } {
   const taxRevenueCents = annualRevenueCents(snapshot.taxRate, context) / TICKS_PER_YEAR;
   const revenueCents = taxRevenueCents + (context.externalRevenueCents ?? 0);
-  const expensesCents = annualExpensesCents(context) / TICKS_PER_YEAR;
+
+  const expensesCents =
+    annualExpensesCents(context) / TICKS_PER_YEAR + (context.externalExpensesCents ?? 0);
 
   const balanceMicro = Math.round((revenueCents - expensesCents) * MICRO);
 
