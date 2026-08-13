@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { AgriculturePanel } from '../../components/agriculture-panel';
 import { ProductionPanel } from '../../components/production-panel';
 import { RequireSession } from '../../components/require-session';
 import { ResourcesPanel } from '../../components/resources-panel';
@@ -73,6 +74,8 @@ function NationDashboard({ nation }: { nation: Nation }) {
 
       <TaxRateControl economy={nation.economy} />
 
+      <AgriculturePanel agriculture={nation.agriculture} />
+
       <ResourcesPanel resources={nation.resources} />
 
       <ProductionPanel production={nation.production} />
@@ -84,8 +87,8 @@ function NationDashboard({ nation }: { nation: Nation }) {
       </StatGroup>
 
       <p className="text-sm text-ink-muted">
-        População, economia, recursos e indústria evoluem por hora decorrida, mesmo com você
-        offline. Simulado até {formatDateTime(nation.simulatedUntil)}. Agricultura, energia e os
+        População, economia, recursos, indústria e lavoura evoluem por hora decorrida, mesmo com
+        você offline. Simulado até {formatDateTime(nation.simulatedUntil)}. Energia, tecnologia e os
         demais atributos ainda são estáticos.
       </p>
     </main>

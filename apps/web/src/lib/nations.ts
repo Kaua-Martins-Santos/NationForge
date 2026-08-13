@@ -90,6 +90,28 @@ export function useSetExtractionRate() {
 }
 
 /**
+ * Altera quanto do território é lavoura.
+ *
+ * Como as demais decisões, a resposta traz o país inteiro: plantar mais muda a
+ * colheita, o custo, as emissões e — por tabela — o risco de fome.
+ */
+export function useSetFarmlandShare() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (farmlandShare: number) =>
+      apiRequest('/nations/me/farmland', {
+        method: 'PATCH',
+        body: { farmlandShare },
+        schema: nationSchema,
+      }),
+    onSuccess: (nation) => {
+      queryClient.setQueryData(NATION_QUERY_KEY, nation);
+    },
+  });
+}
+
+/**
  * Altera quanto de um insumo vai para a indústria.
  *
  * Uma mutation para todas as linhas, com o bem na variável: as linhas dividem a

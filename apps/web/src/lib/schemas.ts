@@ -145,6 +145,27 @@ export const productionSchema = z.object({
 export type ProductionLine = z.infer<typeof productionLineSchema>;
 export type Production = z.infer<typeof productionSchema>;
 
+/**
+ * Domínio Agricultura.
+ *
+ * `weatherLabel` vem do servidor junto do fator: traduzir o número em "seca" no
+ * cliente criaria uma segunda escala, que sairia de sincronia com a do jogo.
+ */
+export const agricultureSchema = z.object({
+  farmlandShare: z.number(),
+  farmlandArea: z.number(),
+  foodStock: z.number(),
+  stockDays: z.number(),
+  annualProduction: z.number(),
+  annualConsumption: z.number(),
+  annualBalance: z.number(),
+  annualCost: z.number(),
+  weather: z.number(),
+  weatherLabel: z.string(),
+});
+
+export type Agriculture = z.infer<typeof agricultureSchema>;
+
 export const nationSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -155,6 +176,7 @@ export const nationSchema = z.object({
   economy: economySchema,
   resources: resourcesSchema,
   production: productionSchema,
+  agriculture: agricultureSchema,
   territory: z.number(),
   happiness: z.number(),
   stability: z.number(),
