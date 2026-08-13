@@ -9,14 +9,25 @@ O projeto é construído de forma incremental e documentada. As regras de desenv
 
 ## Status atual
 
-**Fase 13 — Produção.** O país passa a **beneficiar** o que extrai: ferro vira aço,
-petróleo vira combustível, madeira vira madeira serrada. A decisão é vender in natura ou
-processar — beneficiar quase dobra o que os recursos rendem.
+**Fase 14 — Agricultura.** O primeiro domínio com **estoque que importa**: comida é colhida,
+guardada e consumida todo tick, tenha havido safra ou não. A decisão é quanto do território
+virar lavoura — comida contra tesouro, já que manter a lavoura é o primeiro gasto público de
+verdade do jogo.
 
-O que impede a resposta óbvia ("processar tudo") é a **capacidade industrial**, que vem dos
-trabalhadores, da tecnologia e da infraestrutura. O que passa dela continua sendo vendido
-bruto, e processar polui bem mais que só extrair. Industrializar deixa de ser um botão e
-vira consequência de desenvolver o país.
+Quando o estoque acaba vem a **fome**, e a fome derruba a felicidade, que já move a
+emigração desde a Fase 10. A cadeia fecha sozinha: lavoura pequena → fome → infelicidade →
+menos habitantes → menos impostos.
+
+O **clima** existe sem quebrar o determinismo do tick: ele é uma função pura de (semente do
+país, instante do calendário), com períodos secos e chuvosos de ~30 dias sobre um ciclo
+sazonal. Nada é sorteado durante a simulação — recalcular o mesmo período dá sempre a mesma
+safra, e não adianta recarregar a página esperando o tempo melhorar. Países diferentes vivem
+climas diferentes ao mesmo tempo, o que dá mais um motivo ao comércio.
+
+Antes: **Fase 13 — Produção**, em que o país passa a **beneficiar** o que extrai — ferro vira
+aço, petróleo vira combustível, madeira vira madeira serrada. Beneficiar quase dobra o que os
+recursos rendem; o que impede a resposta óbvia é a **capacidade industrial**, vinda dos
+trabalhadores, da tecnologia e da infraestrutura.
 
 Antes: **Fase 12 — Recursos**, em que cada país nasce com uma **dotação natural diferente**
 — ferro, petróleo, urânio, água — sorteada por semente. A escassez é o ponto: nenhum país
@@ -38,7 +49,7 @@ backend NestJS (Fase 4), frontend Next.js (Fase 5), autenticação com JWT (Fase
 do jogador (Fase 7), criação de países pela API (Fase 8) e telas de autenticação
 (Fase 9a).
 
-Os demais atributos ainda **não evoluem**: agricultura (Fase 14), energia (Fase 16) e o
+Os demais atributos ainda **não evoluem**: energia (Fase 16), tecnologia (Fase 18) e o
 restante do roadmap virão depois. As receitas de produção ainda não consomem energia — o
 insumo só existirá na Fase 16, e fingi-lo antes seria inventar número. A camada visual é
 provisória — um redesign completo está planejado.
@@ -101,7 +112,8 @@ apps/
 │   ├── src/economy/              PIB, impostos, tesouro
 │   ├── src/resources/            dotação natural, extração, reservas
 │   ├── src/production/           catálogo de bens, receitas, capacidade industrial
-│   ├── src/simulation/           o laço de ticks que avança todos os domínios
+│   ├── src/agriculture/          lavoura, estoque de comida, clima e fome
+│   ├── src/simulation/           o laço de ticks, o tempo e a aleatoriedade com semente
 │   ├── src/prisma/                PrismaService/PrismaModule
 │   ├── test/                     testes e2e (Supertest)
 │   └── prisma/schema.prisma      model User + migrations
